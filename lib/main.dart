@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-// importando as telas que voce criou
+// imports das suas telas
 import 'features/login/login_page.dart';
 import 'features/principal/principal_page.dart';
 import 'features/cotacao/cotacao_page.dart';
