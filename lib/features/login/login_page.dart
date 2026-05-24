@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../database/db_helper.dart'; // puxando o banco do rian
+import '../../database/db_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -9,46 +9,40 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final userController = TextEditingController();
-  final senhaController = TextEditingController();
+  final _userController = TextEditingController();
+  final _senhaController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('pay bank - acesso')),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(25.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(
-              controller: userController,
-              decoration: const InputDecoration(labelText: 'nome de usuario'),
-            ),
-            TextField(
-              controller: senhaController,
-              decoration: const InputDecoration(labelText: 'senha'),
-              obscureText: true, // esconde a senha
-            ),
+            const Icon(Icons.account_balance, size: 80, color: Colors.green),
+            const Text('Pay Bank', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 40),
+            TextField(controller: _userController, decoration: const InputDecoration(labelText: 'Usuário')),
+            TextField(controller: _senhaController, decoration: const InputDecoration(labelText: 'Senha'), obscureText: true),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                // gravando no banco de dados de verdade!
                 final db = DatabaseHelper.instance;
-                await db.gravarUsuario({
-                  'nome': 'cliente teste',
-                  'nome_usuario': userController.text,
-                  'senha': senhaController.text,
-                });
-                
-                print('salvo! usuario: ${userController.text}');
-                
-                // joga o usuario pra tela principal depois de salvar
-                if (mounted) {
+                // Busca o usuário no banco do Rian
+                final user = await db.buscarUsuarioPorLogin(_userController.text);
+
+                if (user != null && user['senha'] == _senhaController.text) {
                   Navigator.pushReplacementNamed(context, '/principal');
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Usuário ou senha incorretos!')));
                 }
               },
-              child: const Text('cadastrar e entrar'),
+              child: const Text('Entrar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/cadastro'),
+              child: const Text('Não tem conta? Cadastre-se aqui'),
             )
           ],
         ),

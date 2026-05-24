@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
-  // Singleton: Garante que o aplicativo use apenas uma instância do banco de dados
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
@@ -31,20 +30,34 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         nome_usuario TEXT NOT NULL UNIQUE,
-        senha TEXT NOT NULL
+        senha TEXT NOT NULL,
+        email TEXT NOT NULL,
+        telefone TEXT NOT NULL,
+        cpf TEXT NOT NULL UNIQUE,
+        data_nascimento TEXT NOT NULL,
+        endereco TEXT NOT NULL,
+        cep TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE transferencias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_usuario INTEGER, 
+        recebedor TEXT NOT NULL,
+        valor REAL NOT NULL,
+        data TEXT NOT NULL
       )
     ''');
   }
 
   Future<int> gravarUsuario(Map<String, dynamic> row) async {
     final db = await instance.database;
-    
     return await db.insert('usuarios', row);
   }
 
   Future<List<Map<String, dynamic>>> buscarTodosUsuarios() async {
     final db = await instance.database;
-
     return await db.query('usuarios');
   }
 

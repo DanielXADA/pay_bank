@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-// imports das suas telas
 import 'features/login/login_page.dart';
+import 'features/login/cadastro_page.dart';
 import 'features/principal/principal_page.dart';
 import 'features/cotacao/cotacao_page.dart';
 import 'features/transferencia/transferencia_page.dart';
@@ -24,6 +24,7 @@ class PayBankApp extends StatelessWidget {
       initialRoute: '/login', // abre a tela de login primeiro
       routes: {
         '/login': (context) => const LoginPage(),
+        '/cadastro': (context) => const CadastroPage(),
         '/principal': (context) => const PrincipalPage(),
         '/cotacao': (context) => const CotacaoPage(),
         '/transferencia': (context) => const TransferenciaPage(),
