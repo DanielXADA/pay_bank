@@ -6,9 +6,15 @@ class PrincipalPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pay Bank - Home'), actions: [
-        IconButton(onPressed: () => Navigator.pushReplacementNamed(context, '/login'), icon: const Icon(Icons.exit_to_app))
-      ]),
+      appBar: AppBar(
+        title: const Text('Pay Bank - Home'),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            icon: const Icon(Icons.exit_to_app),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Container(
@@ -21,20 +27,34 @@ class PrincipalPage extends StatelessWidget {
                 Text('Olá, Daniel!', style: TextStyle(fontSize: 20)),
                 SizedBox(height: 10),
                 Text('Saldo disponível:', style: TextStyle(color: Colors.grey)),
-                Text('R\$ 1.250,00', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+                Text(
+                  'R\$ 1.250,00',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ),
+
           const SizedBox(height: 20),
+
           ListTile(
             leading: const Icon(Icons.pix, color: Colors.green),
             title: const Text('Fazer Transferência PIX'),
             onTap: () => Navigator.pushNamed(context, '/transferencia'),
           ),
+
           ListTile(
             leading: const Icon(Icons.monetization_on, color: Colors.blue),
-            title: const Text('Ver Cotação do Dólar'),
-            onTap: () => Navigator.pushNamed(context, '/cotacao'),
+            title: const Text('Ver Cotações'),
+            subtitle: const Text('Dólar, Euro e Bitcoin em tempo real'),
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/cotacao',
+              arguments: {
+                'titulo': 'Cotação PayBank',
+                'moedaInicial': 'USDBRL',
+              },
+            ),
           ),
         ],
       ),

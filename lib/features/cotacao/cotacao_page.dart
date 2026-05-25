@@ -13,6 +13,8 @@ class _CotacaoPageState extends State<CotacaoPage> {
   final TextEditingController valorController = TextEditingController();
 
   bool carregando = true;
+  bool argumentosCarregados = false;
+
   String? erro;
   Map<String, dynamic>? cotacoes;
   String moedaSelecionada = 'USDBRL';
@@ -29,6 +31,24 @@ class _CotacaoPageState extends State<CotacaoPage> {
   void initState() {
     super.initState();
     carregarCotacoes();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!argumentosCarregados) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+      final moedaInicial = args?['moedaInicial'];
+
+      if (moedaInicial != null && nomesMoedas.containsKey(moedaInicial)) {
+        moedaSelecionada = moedaInicial;
+      }
+
+      argumentosCarregados = true;
+    }
   }
 
   Future<void> carregarCotacoes() async {
@@ -85,9 +105,14 @@ class _CotacaoPageState extends State<CotacaoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    final titulo = args?['titulo'] ?? 'Cotação PayBank';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cotação PayBank'),
+        title: Text(titulo),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
