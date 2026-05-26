@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+import 'dart:math';
 import '../../database/db_helper.dart';
 
 class CadastroPage extends StatefulWidget {
@@ -10,10 +11,8 @@ class CadastroPage extends StatefulWidget {
 }
 
 class _CadastroPageState extends State<CadastroPage> {
-  // A 'chave' do formulário para o sistema de erros funcionar
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores
   final _nomeController = TextEditingController();
   final _userController = TextEditingController();
   final _emailController = TextEditingController();
@@ -23,8 +22,11 @@ class _CadastroPageState extends State<CadastroPage> {
   final _enderecoController = TextEditingController();
   final _cepController = TextEditingController();
   final _senhaController = TextEditingController();
+  final _confirmarSenhaController = TextEditingController();
 
-  // Máscaras (O que você pediu para formatar os números)
+  bool _ocultarSenha = true;
+  bool _ocultarConfirmarSenha = true;
+
   var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
   var foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
   var cepMask = MaskTextInputFormatter(mask: '#####-###', filter: {"#": RegExp(r'[0-9]')});
@@ -36,7 +38,6 @@ class _CadastroPageState extends State<CadastroPage> {
       appBar: AppBar(title: const Text('Pay Bank - Abertura de Conta')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
-        // O widget Form agrupa os campos e gerencia a validação
         child: Form(
           key: _formKey,
           child: Column(
@@ -51,7 +52,7 @@ class _CadastroPageState extends State<CadastroPage> {
               
               TextFormField(
                 controller: _cpfController, 
-                inputFormatters: [cpfMask], // Aplica a máscara
+                inputFormatters: [cpfMask], 
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'CPF *', hintText: '000.000.000-00'),
                 validator: (value) => value!.length < 14 ? 'CPF inválido' : null,
@@ -108,9 +109,44 @@ class _CadastroPageState extends State<CadastroPage> {
 
               TextFormField(
                 controller: _senhaController, 
-                decoration: const InputDecoration(labelText: 'Senha (mínimo 6 dígitos) *'), 
-                obscureText: true,
+                obscureText: _ocultarSenha,
+                decoration: InputDecoration(
+                  labelText: 'Senha (mínimo 6 dígitos) *',
+                  suffixIcon: IconButton(
+                    icon: Icon(_ocultarSenha ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _ocultarSenha = !_ocultarSenha;
+                      });
+                    },
+                  ),
+                ), 
                 validator: (value) => value!.length < 6 ? 'A senha deve ter pelo menos 6 caracteres' : null,
+              ),
+
+              TextFormField(
+                controller: _confirmarSenhaController, 
+                obscureText: _ocultarConfirmarSenha,
+                decoration: InputDecoration(
+                  labelText: 'Confirmar Senha *',
+                  suffixIcon: IconButton(
+                    icon: Icon(_ocultarConfirmarSenha ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () {
+                      setState(() {
+                        _ocultarConfirmarSenha = !_ocultarConfirmarSenha;
+                      });
+                    },
+                  ),
+                ), 
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, confirme sua senha';
+                  }
+                  if (value != _senhaController.text) {
+                    return 'As senhas não são iguais';
+                  }
+                  return null;
+                },
               ),
 
               const SizedBox(height: 30),
@@ -119,10 +155,11 @@ class _CadastroPageState extends State<CadastroPage> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () async {
-                    // Aqui a mágica da validação acontece: ele checa todos os campos!
                     if (_formKey.currentState!.validate()) {
-                      
                       try {
+                        final geradorAleatorio = Random();
+                        final numeroContaGerado = '${geradorAleatorio.nextInt(90000) + 10000}-${geradorAleatorio.nextInt(9)}';
+
                         final db = DatabaseHelper.instance;
                         await db.gravarUsuario({
                           'nome': _nomeController.text,
@@ -134,6 +171,9 @@ class _CadastroPageState extends State<CadastroPage> {
                           'data_nascimento': _nascimentoController.text,
                           'endereco': _enderecoController.text,
                           'cep': _cepController.text,
+                          'agencia': '0001',
+                          'numero_conta': numeroContaGerado,
+                          'saldo': 0.0,
                         });
                         
                         if (mounted) {
@@ -143,7 +183,6 @@ class _CadastroPageState extends State<CadastroPage> {
                       } catch (e) {
                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar. Verifique se o CPF ou Usuário já existem. $e')));
                       }
-
                     }
                   },
                   child: const Text('Finalizar Cadastro', style: TextStyle(fontSize: 18)),

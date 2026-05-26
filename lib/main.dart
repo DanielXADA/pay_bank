@@ -5,6 +5,9 @@ import 'features/login/cadastro_page.dart';
 import 'features/principal/principal_page.dart';
 import 'features/cotacao/cotacao_page.dart';
 import 'features/transferencia/transferencia_page.dart';
+import 'features/perfil/perfil_page.dart';
+import 'features/perfil/meus_dados_page.dart';
+import 'features/perfil/minhas_chaves_page.dart';
 
 void main() {
   runApp(const PayBankApp());
@@ -19,15 +22,18 @@ class PayBankApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Pay Bank',
       theme: ThemeData(
-        primarySwatch: Colors.green, // cor padrao do banco
+        primarySwatch: Colors.green,
       ),
-      initialRoute: '/login', // abre a tela de login primeiro
+      initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginPage(),
         '/cadastro': (context) => const CadastroPage(),
         '/principal': (context) => const PrincipalPage(),
         '/cotacao': (context) => const CotacaoPage(),
         '/transferencia': (context) => const TransferenciaPage(),
+        '/perfil': (context) => const PerfilPage(),
+        '/meus_dados': (context) => const MeusDadosPage(),
+        '/minhas_chaves': (context) => const MinhasChavesPage(),
       },
     );
   }

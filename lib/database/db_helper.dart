@@ -39,7 +39,13 @@ class DatabaseHelper {
         cep TEXT NOT NULL,
         chave_aleatoria TEXT,
         foto_rosto TEXT,
-        foto_documento TEXT
+        foto_documento TEXT,
+        agencia TEXT,
+        numero_conta TEXT,
+        saldo REAL,
+        chave_cpf_ativa INTEGER DEFAULT 1,
+        chave_email_ativa INTEGER DEFAULT 0,
+        chave_telefone_ativa INTEGER DEFAULT 0
       )
     ''');
 
@@ -57,6 +63,16 @@ class DatabaseHelper {
   Future<int> gravarUsuario(Map<String, dynamic> row) async {
     final db = await instance.database;
     return await db.insert('usuarios', row);
+  }
+
+  Future<int> atualizarUsuario(int id, Map<String, dynamic> valores) async {
+    final db = await instance.database;
+    return await db.update(
+      'usuarios',
+      valores,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<List<Map<String, dynamic>>> buscarTodosUsuarios() async {
