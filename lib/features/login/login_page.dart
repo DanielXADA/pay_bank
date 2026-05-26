@@ -9,8 +9,11 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _userController = TextEditingController();
+  final _usuarioController = TextEditingController();
   final _senhaController = TextEditingController();
+  
+
+  bool _ocultarSenha = true; 
 
   @override
   Widget build(BuildContext context) {
@@ -23,19 +26,42 @@ class _LoginPageState extends State<LoginPage> {
             const Icon(Icons.account_balance, size: 80, color: Colors.green),
             const Text('Pay Bank', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
             const SizedBox(height: 40),
-            TextField(controller: _userController, decoration: const InputDecoration(labelText: 'Usuário')),
-            TextField(controller: _senhaController, decoration: const InputDecoration(labelText: 'Senha'), obscureText: true),
+            TextField(
+              controller: _usuarioController, 
+              decoration: const InputDecoration(labelText: 'Usuário')
+            ),
+            TextField(
+              controller: _senhaController, 
+              obscureText: _ocultarSenha,
+              decoration: InputDecoration(
+                labelText: 'Senha',
+                // O botão do olhinho
+                suffixIcon: IconButton(
+                  icon: Icon(_ocultarSenha ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () {
+                    setState(() {
+                      _ocultarSenha = !_ocultarSenha;
+                    });
+                  },
+                ),
+              ), 
+            ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
-                final db = DatabaseHelper.instance;
-                // Busca o usuário no banco do Rian
-                final user = await db.buscarUsuarioPorLogin(_userController.text);
+                final bancoDados = DatabaseHelper.instance;
+                final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(_usuarioController.text);
 
-                if (user != null && user['senha'] == _senhaController.text) {
-                  Navigator.pushReplacementNamed(context, '/principal');
+                if (usuarioBanco != null && usuarioBanco['senha'] == _senhaController.text) {
+                  Navigator.pushReplacementNamed(
+                    context, 
+                    '/principal',
+                    arguments: usuarioBanco,
+                  );
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Usuário ou senha incorretos!')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Usuário ou senha incorretos!'))
+                  );
                 }
               },
               child: const Text('Entrar'),

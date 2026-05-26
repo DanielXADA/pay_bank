@@ -59,13 +59,14 @@ class _CotacaoPageState extends State<CotacaoPage> {
 
     try {
       final dados = await cotacaoService.buscarCotacoes();
-
+      if (!mounted) return;
       setState(() {
         cotacoes = dados;
         ultimaAtualizacao = DateTime.now();
         carregando = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         erro = 'Erro ao buscar cotações';
         carregando = false;

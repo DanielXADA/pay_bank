@@ -36,7 +36,10 @@ class DatabaseHelper {
         cpf TEXT NOT NULL UNIQUE,
         data_nascimento TEXT NOT NULL,
         endereco TEXT NOT NULL,
-        cep TEXT NOT NULL
+        cep TEXT NOT NULL,
+        chave_aleatoria TEXT,
+        foto_rosto TEXT,
+        foto_documento TEXT
       )
     ''');
 
@@ -75,6 +78,20 @@ class DatabaseHelper {
     } else {
       return null;
     }
+  }
+
+  Future<int> gravarTransferencia(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('transferencias', row);
+  }
+
+  Future<List<Map<String, dynamic>>> buscarTransferenciasDoUsuario(int idUsuario) async {
+    final db = await instance.database;
+    return await db.query(
+      'transferencias',
+      where: 'id_usuario = ?',
+      whereArgs: [idUsuario],
+    );
   }
 
   Future close() async {
