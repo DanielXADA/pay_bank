@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'dart:math';
 import '../../database/db_helper.dart';
@@ -110,8 +111,10 @@ class _CadastroPageState extends State<CadastroPage> {
               TextFormField(
                 controller: _senhaController, 
                 obscureText: _ocultarSenha,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
-                  labelText: 'Senha (mínimo 6 dígitos) *',
+                  labelText: 'Senha (mínimo 6 dígitos numéricos) *',
                   suffixIcon: IconButton(
                     icon: Icon(_ocultarSenha ? Icons.visibility_off : Icons.visibility),
                     onPressed: () {
@@ -121,12 +124,14 @@ class _CadastroPageState extends State<CadastroPage> {
                     },
                   ),
                 ), 
-                validator: (value) => value!.length < 6 ? 'A senha deve ter pelo menos 6 caracteres' : null,
+                validator: (value) => value!.length < 6 ? 'A senha deve ter pelo menos 6 números' : null,
               ),
 
               TextFormField(
                 controller: _confirmarSenhaController, 
                 obscureText: _ocultarConfirmarSenha,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: InputDecoration(
                   labelText: 'Confirmar Senha *',
                   suffixIcon: IconButton(
@@ -176,12 +181,13 @@ class _CadastroPageState extends State<CadastroPage> {
                           'saldo': 0.0,
                         });
                         
-                        if (mounted) {
-                          Navigator.pop(context); 
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada com sucesso!')));
-                        }
+                        if (!mounted) return;
+                        
+                        Navigator.pop(context); 
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada com sucesso!')));
                       } catch (e) {
-                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar. Verifique se o CPF ou Usuário já existem. $e')));
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar. Verifique se o CPF ou Usuário já existem. $e')));
                       }
                     }
                   },

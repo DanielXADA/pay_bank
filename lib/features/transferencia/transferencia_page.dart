@@ -24,10 +24,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_usuarioRemetente == null) {
-      _usuarioRemetente =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    }
+    _usuarioRemetente ??= ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
   }
 
   String _mascararCpf(String cpf) {

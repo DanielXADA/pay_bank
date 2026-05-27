@@ -175,7 +175,7 @@ class _CotacaoPageState extends State<CotacaoPage> {
                       const SizedBox(height: 20),
 
                       DropdownButtonFormField<String>(
-                        value: moedaSelecionada,
+                        initialValue: moedaSelecionada,
                         decoration: const InputDecoration(
                           labelText: 'Escolha a moeda',
                           border: OutlineInputBorder(),

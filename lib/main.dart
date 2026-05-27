@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'pages/welcome_page.dart';
 import 'features/login/login_page.dart';
 import 'features/login/cadastro_page.dart';
 import 'features/principal/principal_page.dart';
@@ -24,8 +24,9 @@ class PayBankApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.green,
       ),
-      initialRoute: '/login',
+      initialRoute: '/',
       routes: {
+        '/': (context) => const WelcomePage(),
         '/login': (context) => const LoginPage(),
         '/cadastro': (context) => const CadastroPage(),
         '/principal': (context) => const PrincipalPage(),
