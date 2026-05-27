@@ -18,9 +18,10 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
 
     return await openDatabase(
-      path, 
-      version: 1, 
-      onCreate: _createDB
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -52,12 +53,22 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE transferencias (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_usuario INTEGER, 
+        id_usuario INTEGER,
         recebedor TEXT NOT NULL,
         valor REAL NOT NULL,
-        data TEXT NOT NULL
+        data TEXT NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'SAIDA'
       )
     ''');
+  }
+
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        ALTER TABLE transferencias 
+        ADD COLUMN tipo TEXT NOT NULL DEFAULT 'SAIDA'
+      ''');
+    }
   }
 
   Future<int> gravarUsuario(Map<String, dynamic> row) async {
@@ -107,6 +118,7 @@ class DatabaseHelper {
       'transferencias',
       where: 'id_usuario = ?',
       whereArgs: [idUsuario],
+      orderBy: 'id DESC',
     );
   }
 

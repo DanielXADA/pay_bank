@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../database/db_helper.dart';
 
 class PrincipalPage extends StatefulWidget {
@@ -17,8 +20,11 @@ class _PrincipalPageState extends State<PrincipalPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
     if (_usuarioDados == null) {
-      final dadosIniciais = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final dadosIniciais =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
       if (dadosIniciais != null) {
         _carregarDadosReal(dadosIniciais['nome_usuario']);
       }
@@ -27,10 +33,13 @@ class _PrincipalPageState extends State<PrincipalPage> {
 
   Future<void> _carregarDadosReal(String nomeUsuario) async {
     final bancoDados = DatabaseHelper.instance;
-    final usuarioAtualizado = await bancoDados.buscarUsuarioPorLogin(nomeUsuario);
-    
+    final usuarioAtualizado =
+        await bancoDados.buscarUsuarioPorLogin(nomeUsuario);
+
     if (usuarioAtualizado != null) {
-      final transferencias = await bancoDados.buscarTransferenciasDoUsuario(usuarioAtualizado['id']);
+      final transferencias =
+          await bancoDados.buscarTransferenciasDoUsuario(usuarioAtualizado['id']);
+
       if (mounted) {
         setState(() {
           _usuarioDados = usuarioAtualizado;
@@ -39,6 +48,23 @@ class _PrincipalPageState extends State<PrincipalPage> {
         });
       }
     }
+  }
+
+  Widget _fotoPerfilHome() {
+    final caminhoFoto = _usuarioDados?['foto_rosto'];
+
+    if (caminhoFoto != null && caminhoFoto.toString().isNotEmpty) {
+      final arquivo = File(caminhoFoto);
+
+      if (arquivo.existsSync()) {
+        return CircleAvatar(
+          radius: 16,
+          backgroundImage: FileImage(arquivo),
+        );
+      }
+    }
+
+    return const Icon(Icons.account_circle, size: 28);
   }
 
   void _mostrarCaixaDeposito() {
@@ -62,15 +88,20 @@ class _PrincipalPageState extends State<PrincipalPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final textoValor = _controladorDeposito.text.replaceAll(',', '.');
+                final textoValor =
+                    _controladorDeposito.text.replaceAll(',', '.');
                 final valorDeposito = double.tryParse(textoValor);
-                
-                if (valorDeposito != null && valorDeposito > 0 && _usuarioDados != null) {
+
+                if (valorDeposito != null &&
+                    valorDeposito > 0 &&
+                    _usuarioDados != null) {
                   final bancoDados = DatabaseHelper.instance;
                   final banco = await bancoDados.database;
-                  
-                  double saldoAntigo = _usuarioDados!['saldo'] ?? 0.0;
-                  double novoSaldo = saldoAntigo + valorDeposito;
+
+                  final saldoAntigo =
+                      (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
+
+                  final novoSaldo = saldoAntigo + valorDeposito;
 
                   await banco.update(
                     'usuarios',
@@ -81,9 +112,12 @@ class _PrincipalPageState extends State<PrincipalPage> {
 
                   _carregarDadosReal(_usuarioDados!['nome_usuario']);
                 }
-                
+
                 _controladorDeposito.clear();
-                Navigator.pop(context);
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
               },
               child: const Text('Confirmar'),
             ),
@@ -93,10 +127,37 @@ class _PrincipalPageState extends State<PrincipalPage> {
     );
   }
 
-  void _mostrarComprovanteAntigo(Map<String, dynamic> transferencia) {
-    final valorFormatado = (transferencia['valor'] as double).toStringAsFixed(2).replaceAll('.', ',');
+  void _compartilharComprovanteHistorico(
+    Map<String, dynamic> transferencia,
+  ) {
+    final valorFormatado = (transferencia['valor'] as num)
+        .toDouble()
+        .toStringAsFixed(2)
+        .replaceAll('.', ',');
+
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
-    
+
+    final textoComprovante = '''
+Comprovante PIX - Pay Bank
+
+Tipo: ${ehEntrada ? 'Recebimento' : 'Envio'}
+Valor: R\$ $valorFormatado
+${ehEntrada ? 'Pagador' : 'Recebedor'}: ${transferencia['recebedor']}
+Instituição: Pay Bank
+Data: ${transferencia['data']}
+''';
+
+    Share.share(textoComprovante);
+  }
+
+  void _mostrarComprovanteAntigo(Map<String, dynamic> transferencia) {
+    final valorFormatado = (transferencia['valor'] as num)
+        .toDouble()
+        .toStringAsFixed(2)
+        .replaceAll('.', ',');
+
+    final ehEntrada = transferencia['tipo'] == 'ENTRADA';
+
     showDialog(
       context: context,
       builder: (context) {
@@ -106,11 +167,23 @@ class _PrincipalPageState extends State<PrincipalPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Center(child: Icon(Icons.check_circle, size: 50, color: Colors.green)),
+              const Center(
+                child: Icon(Icons.check_circle, size: 50, color: Colors.green),
+              ),
               const SizedBox(height: 15),
-              Text('Valor: R\$ $valorFormatado', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(
+                'Valor: R\$ $valorFormatado',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const Divider(),
-              Text(ehEntrada ? 'Pagador: ${transferencia['recebedor']}' : 'Recebedor: ${transferencia['recebedor']}'),
+              Text(
+                ehEntrada
+                    ? 'Pagador: ${transferencia['recebedor']}'
+                    : 'Recebedor: ${transferencia['recebedor']}',
+              ),
               const SizedBox(height: 5),
               Text('Data: ${transferencia['data']}'),
               const SizedBox(height: 5),
@@ -118,6 +191,11 @@ class _PrincipalPageState extends State<PrincipalPage> {
             ],
           ),
           actions: [
+            TextButton.icon(
+              onPressed: () => _compartilharComprovanteHistorico(transferencia),
+              icon: const Icon(Icons.share),
+              label: const Text('Compartilhar'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Fechar'),
@@ -126,6 +204,12 @@ class _PrincipalPageState extends State<PrincipalPage> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _controladorDeposito.dispose();
+    super.dispose();
   }
 
   @override
@@ -139,16 +223,21 @@ class _PrincipalPageState extends State<PrincipalPage> {
     final nomeCliente = _usuarioDados!['nome'];
     final agencia = _usuarioDados!['agencia'] ?? '0001';
     final numeroConta = _usuarioDados!['numero_conta'] ?? '00000-0';
-    double saldoObtido = _usuarioDados!['saldo'] ?? 0.0;
+
+    final saldoObtido = (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
     final saldoFormatado = saldoObtido.toStringAsFixed(2).replaceAll('.', ',');
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pay Bank - Home'),
         leading: IconButton(
-          icon: const Icon(Icons.account_circle, size: 28),
+          icon: _fotoPerfilHome(),
           onPressed: () {
-            Navigator.pushNamed(context, '/perfil', arguments: _usuarioDados).then((_) {
+            Navigator.pushNamed(
+              context,
+              '/perfil',
+              arguments: _usuarioDados,
+            ).then((_) {
               _carregarDadosReal(_usuarioDados!['nome_usuario']);
             });
           },
@@ -169,32 +258,61 @@ class _PrincipalPageState extends State<PrincipalPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Olá, $nomeCliente!', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(
+                  'Olá, $nomeCliente!',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 5),
-                Text('Agência: $agencia | Conta: $numeroConta', style: const TextStyle(color: Colors.black54, fontSize: 14)),
+                Text(
+                  'Agência: $agencia | Conta: $numeroConta',
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontSize: 14,
+                  ),
+                ),
                 const SizedBox(height: 15),
-                const Text('Saldo disponível:', style: TextStyle(color: Colors.grey)),
+                const Text(
+                  'Saldo disponível:',
+                  style: TextStyle(color: Colors.grey),
+                ),
                 Text(
                   'R\$ $saldoFormatado',
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
           ),
+
           const SizedBox(height: 20),
+
           ListTile(
-            leading: const Icon(Icons.account_balance_wallet, color: Colors.orange),
+            leading: const Icon(
+              Icons.account_balance_wallet,
+              color: Colors.orange,
+            ),
             title: const Text('Depositar Dinheiro'),
             subtitle: const Text('Adicionar saldo para a conta'),
             onTap: _mostrarCaixaDeposito,
           ),
+
           ListTile(
             leading: const Icon(Icons.pix, color: Colors.green),
             title: const Text('Fazer Transferência PIX'),
-            onTap: () => Navigator.pushNamed(context, '/transferencia', arguments: _usuarioDados).then((_) {
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/transferencia',
+              arguments: _usuarioDados,
+            ).then((_) {
               _carregarDadosReal(_usuarioDados!['nome_usuario']);
             }),
           ),
+
           ListTile(
             leading: const Icon(Icons.monetization_on, color: Colors.blue),
             title: const Text('Ver Cotações'),
@@ -208,34 +326,51 @@ class _PrincipalPageState extends State<PrincipalPage> {
               },
             ),
           ),
+
           const Divider(),
+
           const Padding(
             padding: EdgeInsets.all(16.0),
-            child: Text('Histórico de transações', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Histórico de transações',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
+
           if (_listaTransferencias.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text('Nenhuma transferência realizada ainda.', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Nenhuma transferência realizada ainda.',
+                style: TextStyle(color: Colors.grey),
+              ),
             )
           else
             ..._listaTransferencias.map((transferencia) {
-              final valorFormatadoItem = (transferencia['valor'] as double).toStringAsFixed(2).replaceAll('.', ',');
+              final valorFormatadoItem = (transferencia['valor'] as num)
+                  .toDouble()
+                  .toStringAsFixed(2)
+                  .replaceAll('.', ',');
+
               final ehEntrada = transferencia['tipo'] == 'ENTRADA';
 
               return ListTile(
                 leading: Icon(
-                  ehEntrada ? Icons.arrow_downward : Icons.arrow_upward, 
-                  color: ehEntrada ? Colors.green : Colors.red
+                  ehEntrada ? Icons.arrow_downward : Icons.arrow_upward,
+                  color: ehEntrada ? Colors.green : Colors.red,
                 ),
-                title: Text(ehEntrada ? 'PIX recebido de ${transferencia['recebedor']}' : 'PIX enviado para ${transferencia['recebedor']}'),
+                title: Text(
+                  ehEntrada
+                      ? 'PIX recebido de ${transferencia['recebedor']}'
+                      : 'PIX enviado para ${transferencia['recebedor']}',
+                ),
                 subtitle: Text(transferencia['data']),
                 trailing: Text(
-                  '${ehEntrada ? "+" : "-"} R\$ $valorFormatadoItem', 
+                  '${ehEntrada ? "+" : "-"} R\$ $valorFormatadoItem',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold, 
-                    color: ehEntrada ? Colors.green : Colors.red
-                  )
+                    fontWeight: FontWeight.bold,
+                    color: ehEntrada ? Colors.green : Colors.red,
+                  ),
                 ),
                 onTap: () => _mostrarComprovanteAntigo(transferencia),
               );

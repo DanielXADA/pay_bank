@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../database/db_helper.dart';
 
 class TransferenciaPage extends StatefulWidget {
@@ -24,7 +25,8 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_usuarioRemetente == null) {
-      _usuarioRemetente = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      _usuarioRemetente =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     }
   }
 
@@ -40,7 +42,8 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
 
     if (_usuarioRemetente == null) return;
 
-    double saldoDisponivel = _usuarioRemetente!['saldo'] ?? 0.0;
+    final saldoDisponivel =
+        (_usuarioRemetente!['saldo'] as num?)?.toDouble() ?? 0.0;
 
     if (valorDigitado == null || valorDigitado <= 0) {
       _mostrarMensagem('Digite um valor válido para a transferência.');
@@ -61,29 +64,52 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
     String chaveFormatadaFone = chaveDigitada;
 
     if (chaveDigitada.length == 11 && int.tryParse(chaveDigitada) != null) {
-      chaveFormatadaCpf = '${chaveDigitada.substring(0, 3)}.${chaveDigitada.substring(3, 6)}.${chaveDigitada.substring(6, 9)}-${chaveDigitada.substring(9, 11)}';
-      chaveFormatadaFone = '(${chaveDigitada.substring(0, 2)}) ${chaveDigitada.substring(2, 7)}-${chaveDigitada.substring(7, 11)}';
+      chaveFormatadaCpf =
+          '${chaveDigitada.substring(0, 3)}.${chaveDigitada.substring(3, 6)}.${chaveDigitada.substring(6, 9)}-${chaveDigitada.substring(9, 11)}';
+
+      chaveFormatadaFone =
+          '(${chaveDigitada.substring(0, 2)}) ${chaveDigitada.substring(2, 7)}-${chaveDigitada.substring(7, 11)}';
     }
 
     final bancoDados = DatabaseHelper.instance;
     final banco = await bancoDados.database;
     List<Map<String, dynamic>> resultado = [];
 
-    final buscaCpf = await banco.query('usuarios', where: 'cpf = ? AND chave_cpf_ativa = 1', whereArgs: [chaveFormatadaCpf]);
+    final buscaCpf = await banco.query(
+      'usuarios',
+      where: 'cpf = ? AND chave_cpf_ativa = 1',
+      whereArgs: [chaveFormatadaCpf],
+    );
+
     if (buscaCpf.isNotEmpty) resultado = buscaCpf;
 
     if (resultado.isEmpty) {
-      final buscaEmail = await banco.query('usuarios', where: 'email = ? AND chave_email_ativa = 1', whereArgs: [chaveDigitada]);
+      final buscaEmail = await banco.query(
+        'usuarios',
+        where: 'email = ? AND chave_email_ativa = 1',
+        whereArgs: [chaveDigitada],
+      );
+
       if (buscaEmail.isNotEmpty) resultado = buscaEmail;
     }
 
     if (resultado.isEmpty) {
-      final buscaTelefone = await banco.query('usuarios', where: 'telefone = ? AND chave_telefone_ativa = 1', whereArgs: [chaveFormatadaFone]);
+      final buscaTelefone = await banco.query(
+        'usuarios',
+        where: 'telefone = ? AND chave_telefone_ativa = 1',
+        whereArgs: [chaveFormatadaFone],
+      );
+
       if (buscaTelefone.isNotEmpty) resultado = buscaTelefone;
     }
 
     if (resultado.isEmpty) {
-      final buscaAleatoria = await banco.query('usuarios', where: 'chave_aleatoria = ?', whereArgs: [chaveDigitada]);
+      final buscaAleatoria = await banco.query(
+        'usuarios',
+        where: 'chave_aleatoria = ?',
+        whereArgs: [chaveDigitada],
+      );
+
       if (buscaAleatoria.isNotEmpty) resultado = buscaAleatoria;
     }
 
@@ -139,6 +165,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
                     const SnackBar(content: Text('Senha de acesso incorreta!')),
                   );
                 }
+
                 _controladorSenha.clear();
               },
               child: const Text('Confirmar'),
@@ -150,56 +177,100 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   }
 
   void _processarTransferenciaNoBanco() async {
-    final bancoDados = DatabaseHelper.instance;
-    final banco = await bancoDados.database;
+    try {
+      final bancoDados = DatabaseHelper.instance;
+      final banco = await bancoDados.database;
 
-    double saldoAntigoRemetente = _usuarioRemetente!['saldo'] ?? 0.0;
-    double novoSaldoRemetente = saldoAntigoRemetente - _valorTransferencia;
+      final saldoAntigoRemetente =
+          (_usuarioRemetente!['saldo'] as num?)?.toDouble() ?? 0.0;
 
-    double saldoAntigoRecebedor = _usuarioRecebedor!['saldo'] ?? 0.0;
-    double novoSaldoRecebedor = saldoAntigoRecebedor + _valorTransferencia;
+      final saldoAntigoRecebedor =
+          (_usuarioRecebedor!['saldo'] as num?)?.toDouble() ?? 0.0;
 
-    await banco.update(
-      'usuarios',
-      {'saldo': novoSaldoRemetente},
-      where: 'id = ?',
-      whereArgs: [_usuarioRemetente!['id']],
-    );
+      final novoSaldoRemetente = saldoAntigoRemetente - _valorTransferencia;
+      final novoSaldoRecebedor = saldoAntigoRecebedor + _valorTransferencia;
 
-    await banco.update(
-      'usuarios',
-      {'saldo': novoSaldoRecebedor},
-      where: 'id = ?',
-      whereArgs: [_usuarioRecebedor!['id']],
-    );
+      await banco.update(
+        'usuarios',
+        {'saldo': novoSaldoRemetente},
+        where: 'id = ?',
+        whereArgs: [_usuarioRemetente!['id']],
+      );
 
-    final dataAtual = DateTime.now();
-    _dataHoraTransacao = '${dataAtual.day.toString().padLeft(2, '0')}/${dataAtual.month.toString().padLeft(2, '0')}/${dataAtual.year} às ${dataAtual.hour.toString().padLeft(2, '0')}:${dataAtual.minute.toString().padLeft(2, '0')}';
-    _idTransacao = 'E${dataAtual.millisecondsSinceEpoch}';
+      await banco.update(
+        'usuarios',
+        {'saldo': novoSaldoRecebedor},
+        where: 'id = ?',
+        whereArgs: [_usuarioRecebedor!['id']],
+      );
 
-    await bancoDados.gravarTransferencia({
-      'id_usuario': _usuarioRemetente!['id'],
-      'recebedor': _usuarioRecebedor!['nome'],
-      'valor': _valorTransferencia,
-      'data': _dataHoraTransacao,
-      'tipo': 'SAIDA',
-    });
+      final dataAtual = DateTime.now();
 
-    await bancoDados.gravarTransferencia({
-      'id_usuario': _usuarioRecebedor!['id'],
-      'recebedor': _usuarioRemetente!['nome'],
-      'valor': _valorTransferencia,
-      'data': _dataHoraTransacao,
-      'tipo': 'ENTRADA',
-    });
+      _dataHoraTransacao =
+          '${dataAtual.day.toString().padLeft(2, '0')}/${dataAtual.month.toString().padLeft(2, '0')}/${dataAtual.year} às ${dataAtual.hour.toString().padLeft(2, '0')}:${dataAtual.minute.toString().padLeft(2, '0')}';
 
-    setState(() {
-      _passoAtual = 3;
-    });
+      _idTransacao = 'E${dataAtual.millisecondsSinceEpoch}';
+
+      await bancoDados.gravarTransferencia({
+        'id_usuario': _usuarioRemetente!['id'],
+        'recebedor': _usuarioRecebedor!['nome'],
+        'valor': _valorTransferencia,
+        'data': _dataHoraTransacao,
+        'tipo': 'SAIDA',
+      });
+
+      await bancoDados.gravarTransferencia({
+        'id_usuario': _usuarioRecebedor!['id'],
+        'recebedor': _usuarioRemetente!['nome'],
+        'valor': _valorTransferencia,
+        'data': _dataHoraTransacao,
+        'tipo': 'ENTRADA',
+      });
+
+      setState(() {
+        _passoAtual = 3;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao processar transferência: $e')),
+      );
+    }
   }
 
   void _mostrarMensagem(String texto) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(texto)),
+    );
+  }
+
+  void _compartilharComprovante() {
+    if (_usuarioRemetente == null || _usuarioRecebedor == null) return;
+
+    final valorFormatado =
+        _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+
+    final textoComprovante = '''
+Comprovante PIX - Pay Bank
+
+Transferência realizada com sucesso.
+
+Valor: R\$ $valorFormatado
+Pagador: ${_usuarioRemetente!['nome']}
+Recebedor: ${_usuarioRecebedor!['nome']}
+Instituição: Pay Bank
+Data e Hora: $_dataHoraTransacao
+ID da Transação: $_idTransacao
+''';
+
+    Share.share(textoComprovante);
+  }
+
+  @override
+  void dispose() {
+    _controladorValor.dispose();
+    _controladorChave.dispose();
+    _controladorSenha.dispose();
+    super.dispose();
   }
 
   @override
@@ -227,7 +298,10 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Qual é o valor da transferência?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text(
+            'Qual é o valor da transferência?',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 10),
           TextField(
             controller: _controladorValor,
@@ -241,7 +315,10 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
           ),
           const Divider(),
           const SizedBox(height: 25),
-          const Text('Chave PIX do recebedor:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            'Chave PIX do recebedor:',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 10),
           TextField(
             controller: _controladorChave,
@@ -262,28 +339,66 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
           ),
         ],
       );
-    } else if (_passoAtual == 2) {
-      final valorFormatado = _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+    }
+
+    if (_passoAtual == 2) {
+      final valorFormatado =
+          _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Revise as informações', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text(
+            'Revise as informações',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 25),
-          const Text('Valor a ser transferido', style: TextStyle(color: Colors.grey, fontSize: 14)),
-          Text('R\$ $valorFormatado', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.green)),
+          const Text(
+            'Valor a ser transferido',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          Text(
+            'R\$ $valorFormatado',
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.green,
+            ),
+          ),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 10),
-          const Text('De (Pagador)', style: TextStyle(color: Colors.grey, fontSize: 14)),
-          Text(_usuarioRemetente!['nome'], style: const TextStyle(fontSize: 16)),
+          const Text(
+            'De (Pagador)',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          Text(
+            _usuarioRemetente!['nome'],
+            style: const TextStyle(fontSize: 16),
+          ),
           const SizedBox(height: 15),
-          const Text('Para (Recebedor)', style: TextStyle(color: Colors.grey, fontSize: 14)),
-          Text(_usuarioRecebedor!['nome'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Para (Recebedor)',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          Text(
+            _usuarioRecebedor!['nome'],
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 15),
-          const Text('Instituição', style: TextStyle(color: Colors.grey, fontSize: 14)),
-          const Text('Pay Bank - Instituição de Pagamento', style: TextStyle(fontSize: 16)),
+          const Text(
+            'Instituição',
+            style: TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          const Text(
+            'Pay Bank - Instituição de Pagamento',
+            style: TextStyle(fontSize: 16),
+          ),
           const SizedBox(height: 15),
-          Text('Agência: ${_usuarioRecebedor!['agencia']} | Conta: ${_usuarioRecebedor!['numero_conta']}', style: const TextStyle(fontSize: 16)),
+          Text(
+            'Agência: ${_usuarioRecebedor!['agencia']} | Conta: ${_usuarioRecebedor!['numero_conta']}',
+            style: const TextStyle(fontSize: 16),
+          ),
           const Spacer(),
           ElevatedButton(
             onPressed: _solicitarSenhaEFinalizar,
@@ -292,13 +407,20 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Confirmar Transferência', style: TextStyle(fontSize: 18)),
+            child: const Text(
+              'Confirmar Transferência',
+              style: TextStyle(fontSize: 18),
+            ),
           ),
         ],
       );
-    } else {
-      final valorFormatado = _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
-      return Column(
+    }
+
+    final valorFormatado =
+        _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+
+    return SingleChildScrollView(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Center(
@@ -306,29 +428,55 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
           ),
           const SizedBox(height: 10),
           const Center(
-            child: Text('Transferência realizada!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            child: Text(
+              'Transferência realizada!',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 30),
           const Text('Valor', style: TextStyle(color: Colors.grey)),
-          Text('R\$ $valorFormatado', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          Text(
+            'R\$ $valorFormatado',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
           const Divider(),
           const Text('Pagador', style: TextStyle(color: Colors.grey)),
-          Text(_usuarioRemetente!['nome'], style: const TextStyle(fontSize: 16)),
+          Text(
+            _usuarioRemetente!['nome'],
+            style: const TextStyle(fontSize: 16),
+          ),
           const Divider(),
           const Text('Recebedor', style: TextStyle(color: Colors.grey)),
-          Text(_usuarioRecebedor!['nome'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          Text('CPF: ${_mascararCpf(_usuarioRecebedor!['cpf'])}', style: const TextStyle(color: Colors.black54)),
+          Text(
+            _usuarioRecebedor!['nome'],
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'CPF: ${_mascararCpf(_usuarioRecebedor!['cpf'])}',
+            style: const TextStyle(color: Colors.black54),
+          ),
           const Divider(),
           const Text('Instituição', style: TextStyle(color: Colors.grey)),
           const Text('Pay Bank'),
-          Text('Agência: ${_usuarioRecebedor!['agencia']} | Conta: ${_usuarioRecebedor!['numero_conta']}'),
+          Text(
+            'Agência: ${_usuarioRecebedor!['agencia']} | Conta: ${_usuarioRecebedor!['numero_conta']}',
+          ),
           const Divider(),
           const Text('Data e Hora', style: TextStyle(color: Colors.grey)),
           Text(_dataHoraTransacao),
           const Divider(),
           const Text('ID da Transação', style: TextStyle(color: Colors.grey)),
           Text(_idTransacao),
-          const Spacer(),
+          const SizedBox(height: 25),
+          OutlinedButton.icon(
+            onPressed: _compartilharComprovante,
+            icon: const Icon(Icons.share),
+            label: const Text('Compartilhar comprovante'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 50),
+            ),
+          ),
+          const SizedBox(height: 10),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
@@ -338,10 +486,13 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
               backgroundColor: Colors.black87,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Voltar para o início', style: TextStyle(fontSize: 18)),
+            child: const Text(
+              'Voltar para o início',
+              style: TextStyle(fontSize: 18),
+            ),
           ),
         ],
-      );
-    }
+      ),
+    );
   }
 }
