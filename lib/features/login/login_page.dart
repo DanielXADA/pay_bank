@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import '../../database/db_helper.dart';
+import 'dart:ui';
+import 'dart:math' as math;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,240 +9,194 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
-  final _usuarioController = TextEditingController();
-  final _senhaController = TextEditingController();
-  
-  bool _ocultarSenha = true; 
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
+  late final AnimationController _controller1;
+  late final AnimationController _controller2;
 
-  void _mostrarDialogoEsqueciSenha() {
-    final controladorUser = TextEditingController();
-    final controladorCpf = TextEditingController();
-    final controladorNascimento = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    _controller1 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
 
-    var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
-    var dataMask = MaskTextInputFormatter(mask: '##/##/####', filter: {"#": RegExp(r'[0-9]')});
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Recuperar Senha'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: controladorUser,
-                  decoration: const InputDecoration(
-                    labelText: 'Nome de Usuário (@)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controladorCpf,
-                  inputFormatters: [cpfMask],
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirme seu CPF',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controladorNascimento,
-                  inputFormatters: [dataMask],
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Data de Nascimento',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final username = controladorUser.text.trim();
-                final cpf = controladorCpf.text.trim();
-                final nascimento = controladorNascimento.text.trim();
-
-                if (username.isEmpty || cpf.isEmpty || nascimento.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Preencha todos os campos!')),
-                  );
-                  return;
-                }
-
-                final bancoDados = DatabaseHelper.instance;
-                final usuario = await bancoDados.buscarUsuarioPorLogin(username);
-
-                if (usuario != null && 
-                    usuario['cpf'] == cpf && 
-                    usuario['data_nascimento'] == nascimento) {
-                  
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  _mostrarDialogoNovaSenha(usuario['id']);
-                } else {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Dados incorretos ou usuário não encontrado!')),
-                  );
-                }
-              },
-              child: const Text('Verificar'),
-            ),
-          ],
-        );
-      },
-    );
+    _controller2 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat();
   }
 
-  void _mostrarDialogoNovaSenha(int idUsuario) {
-    final controladorNova = TextEditingController();
-    final controladorConfirma = TextEditingController();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Criar Nova Senha'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controladorNova,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Nova Senha (mínimo 6 números)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controladorConfirma,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Confirmar Nova Senha',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () async {
-                final nova = controladorNova.text.trim();
-                final confirma = controladorConfirma.text.trim();
-
-                if (nova.length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('A senha deve ter pelo menos 6 números!')),
-                  );
-                  return;
-                }
-
-                if (nova != confirma) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('As senhas não são iguais!')),
-                  );
-                  return;
-                }
-
-                final bancoDados = DatabaseHelper.instance;
-                await bancoDados.atualizarUsuario(idUsuario, {'senha': nova});
-
-                if (!mounted) return;
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Senha redefinida com sucesso!')),
-                );
-              },
-              child: const Text('Redefinir Senha'),
-                ),
-          ],
-        );
-      },
-    );
+  @override
+  void dispose() {
+    _controller1.dispose();
+    _controller2.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<Color> bankPalette = [
+      const Color(0xFF10251B),
+      const Color(0xFF244A3A),
+      const Color(0xFF3FA168),
+      const Color(0xFFD4F85A),
+      const Color(0xFF3FA168),
+      const Color(0xFF244A3A),
+      const Color(0xFF10251B),
+    ];
+
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(25.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.account_balance, size: 80, color: Colors.green),
-            const Text('Pay Bank', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _usuarioController, 
-              decoration: const InputDecoration(labelText: 'Usuário')
-            ),
-            TextField(
-              controller: _senhaController, 
-              obscureText: _ocultarSenha,
-              decoration: InputDecoration(
-                labelText: 'Senha',
-                suffixIcon: IconButton(
-                  icon: Icon(_ocultarSenha ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () {
-                    setState(() {
-                      _ocultarSenha = !_ocultarSenha;
-                    });
-                  },
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: RotationTransition(
+              turns: _controller1,
+              child: Transform.scale(
+                scale: 2.5,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(colors: bankPalette),
+                    ),
+                  ),
                 ),
-              ), 
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _mostrarDialogoEsqueciSenha,
-                child: const Text('Esqueceu sua senha?', style: TextStyle(color: Colors.grey)),
               ),
             ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () async {
-                final bancoDados = DatabaseHelper.instance;
-                final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(_usuarioController.text);
-
-                if (!mounted) return;
-
-                if (usuarioBanco != null && usuarioBanco['senha'] == _senhaController.text) {
-                  Navigator.pushReplacementNamed(
-                    context, 
-                    '/principal',
-                    arguments: usuarioBanco,
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Usuário ou senha incorretos!'))
-                  );
-                }
+          ),
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _controller2,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: -_controller2.value * 2 * math.pi,
+                  child: child,
+                );
               },
-              child: const Text('Entrar'),
+              child: Transform.scale(
+                scale: 2.0,
+                child: Opacity(
+                  opacity: 0.6,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: bankPalette.reversed.toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.pushNamed(context, '/cadastro'),
-              child: const Text('Não tem conta? Cadastre-se aqui'),
-            )
-          ],
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: _buildFormCard(
+                context,
+                title: "Entrar",
+                children: [
+                  _buildInput("E-mail"),
+                  const SizedBox(height: 20),
+                  _buildInput("Senha", obscureText: true),
+                  const SizedBox(height: 30),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4F85A),
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: () {},
+                    child: const Text(
+                      "Entrar",
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard(BuildContext context, {required String title, required List<Widget> children}) {
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.85,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD3D3D3),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF32325D).withOpacity(0.25),
+            blurRadius: 50,
+            offset: const Offset(0, 30),
+            blurStyle: BlurStyle.inner,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 26,
+            offset: const Offset(0, 18),
+            blurStyle: BlurStyle.inner,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF212121),
+            ),
+          ),
+          const SizedBox(height: 30),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInput(String label, {bool obscureText = false}) {
+    return TextField(
+      obscureText: obscureText,
+      style: const TextStyle(color: Color(0xFF212121), fontSize: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF757575)),
+        floatingLabelStyle: const TextStyle(color: Color(0xFF3FA168)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF9E9E9E), width: 1.5),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF3FA168), width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.all(16),
       ),
     );
   }

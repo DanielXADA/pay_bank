@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import 'dart:math';
-import '../../database/db_helper.dart';
+import 'dart:ui';
+import 'dart:math' as math;
 
 class CadastroPage extends StatefulWidget {
   const CadastroPage({super.key});
@@ -11,193 +9,206 @@ class CadastroPage extends StatefulWidget {
   State<CadastroPage> createState() => _CadastroPageState();
 }
 
-class _CadastroPageState extends State<CadastroPage> {
-  final _formKey = GlobalKey<FormState>();
+class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMixin {
+  late final AnimationController _controller1;
+  late final AnimationController _controller2;
 
-  final _nomeController = TextEditingController();
-  final _userController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _telefoneController = TextEditingController();
-  final _cpfController = TextEditingController();
-  final _nascimentoController = TextEditingController();
-  final _enderecoController = TextEditingController();
-  final _cepController = TextEditingController();
-  final _senhaController = TextEditingController();
-  final _confirmarSenhaController = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    _controller1 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
 
-  bool _ocultarSenha = true;
-  bool _ocultarConfirmarSenha = true;
+    _controller2 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat();
+  }
 
-  var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
-  var foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
-  var cepMask = MaskTextInputFormatter(mask: '#####-###', filter: {"#": RegExp(r'[0-9]')});
-  var dataMask = MaskTextInputFormatter(mask: '##/##/####', filter: {"#": RegExp(r'[0-9]')});
+  @override
+  void dispose() {
+    _controller1.dispose();
+    _controller2.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final List<Color> bankPalette = [
+      const Color(0xFF10251B),
+      const Color(0xFF244A3A),
+      const Color(0xFF3FA168),
+      const Color(0xFFD4F85A),
+      const Color(0xFF3FA168),
+      const Color(0xFF244A3A),
+      const Color(0xFF10251B),
+    ];
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Pay Bank - Abertura de Conta')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              const Text('Dados Pessoais', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              
-              TextFormField(
-                controller: _nomeController, 
-                decoration: const InputDecoration(labelText: 'Nome Completo *'),
-                validator: (value) => value!.isEmpty ? 'Campo obrigatório' : null,
-              ),
-              
-              TextFormField(
-                controller: _cpfController, 
-                inputFormatters: [cpfMask], 
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'CPF *', hintText: '000.000.000-00'),
-                validator: (value) => value!.length < 14 ? 'CPF inválido' : null,
-              ),
-
-              TextFormField(
-                controller: _nascimentoController, 
-                inputFormatters: [dataMask],
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Data de Nascimento *', hintText: 'DD/MM/AAAA'),
-                validator: (value) => value!.length < 10 ? 'Data inválida' : null,
-              ),
-
-              const SizedBox(height: 20),
-              const Text('Contato e Endereço', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-              TextFormField(
-                controller: _emailController, 
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'E-mail *'),
-                validator: (value) => value!.contains('@') ? null : 'E-mail inválido',
-              ),
-
-              TextFormField(
-                controller: _telefoneController, 
-                inputFormatters: [foneMask],
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Telefone Celular *'),
-                validator: (value) => value!.length < 15 ? 'Telefone inválido' : null,
-              ),
-
-              TextFormField(
-                controller: _cepController, 
-                inputFormatters: [cepMask],
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'CEP *'),
-                validator: (value) => value!.length < 9 ? 'CEP inválido' : null,
-              ),
-
-              TextFormField(
-                controller: _enderecoController, 
-                decoration: const InputDecoration(labelText: 'Endereço Completo *'),
-                validator: (value) => value!.isEmpty ? 'Campo obrigatório' : null,
-              ),
-
-              const SizedBox(height: 20),
-              const Text('Acesso ao App', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-              TextFormField(
-                controller: _userController, 
-                decoration: const InputDecoration(labelText: 'Nome de Usuário (@) *'),
-                validator: (value) => value!.isEmpty ? 'Crie um nome de usuário' : null,
-              ),
-
-              TextFormField(
-                controller: _senhaController, 
-                obscureText: _ocultarSenha,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Senha (mínimo 6 dígitos numéricos) *',
-                  suffixIcon: IconButton(
-                    icon: Icon(_ocultarSenha ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _ocultarSenha = !_ocultarSenha;
-                      });
-                    },
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: RotationTransition(
+              turns: _controller1,
+              child: Transform.scale(
+                scale: 2.5,
+                child: Opacity(
+                  opacity: 0.8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(colors: bankPalette),
+                    ),
                   ),
-                ), 
-                validator: (value) => value!.length < 6 ? 'A senha deve ter pelo menos 6 números' : null,
-              ),
-
-              TextFormField(
-                controller: _confirmarSenhaController, 
-                obscureText: _ocultarConfirmarSenha,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Confirmar Senha *',
-                  suffixIcon: IconButton(
-                    icon: Icon(_ocultarConfirmarSenha ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _ocultarConfirmarSenha = !_ocultarConfirmarSenha;
-                      });
-                    },
-                  ),
-                ), 
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, confirme sua senha';
-                  }
-                  if (value != _senhaController.text) {
-                    return 'As senhas não são iguais';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      try {
-                        final geradorAleatorio = Random();
-                        final numeroContaGerado = '${geradorAleatorio.nextInt(90000) + 10000}-${geradorAleatorio.nextInt(9)}';
-
-                        final db = DatabaseHelper.instance;
-                        await db.gravarUsuario({
-                          'nome': _nomeController.text,
-                          'nome_usuario': _userController.text,
-                          'senha': _senhaController.text,
-                          'email': _emailController.text,
-                          'telefone': _telefoneController.text,
-                          'cpf': _cpfController.text,
-                          'data_nascimento': _nascimentoController.text,
-                          'endereco': _enderecoController.text,
-                          'cep': _cepController.text,
-                          'agencia': '0001',
-                          'numero_conta': numeroContaGerado,
-                          'saldo': 0.0,
-                        });
-                        
-                        if (!mounted) return;
-                        
-                        Navigator.pop(context); 
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada com sucesso!')));
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar. Verifique se o CPF ou Usuário já existem. $e')));
-                      }
-                    }
-                  },
-                  child: const Text('Finalizar Cadastro', style: TextStyle(fontSize: 18)),
                 ),
               ),
-              const SizedBox(height: 40),
-            ],
+            ),
           ),
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _controller2,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: -_controller2.value * 2 * math.pi,
+                  child: child,
+                );
+              },
+              child: Transform.scale(
+                scale: 2.0,
+                child: Opacity(
+                  opacity: 0.6,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: bankPalette.reversed.toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: _buildFormCard(
+                  context,
+                  title: "Criar Conta",
+                  children: [
+                    _buildInput("Nome Completo"),
+                    const SizedBox(height: 16),
+                    _buildInput("CPF"),
+                    const SizedBox(height: 16),
+                    _buildInput("Endereço"),
+                    const SizedBox(height: 16),
+                    _buildInput("Telefone"),
+                    const SizedBox(height: 16),
+                    _buildInput("E-mail"),
+                    const SizedBox(height: 16),
+                    _buildInput("Senha", obscureText: true),
+                    const SizedBox(height: 30),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD4F85A),
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () {},
+                      child: const Text(
+                        "Cadastrar",
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormCard(BuildContext context, {required String title, required List<Widget> children}) {
+    return Container(
+      width: MediaQuery.of(context).size.width * 0.85,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD3D3D3),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF32325D).withOpacity(0.25),
+            blurRadius: 50,
+            offset: const Offset(0, 30),
+            blurStyle: BlurStyle.inner,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 26,
+            offset: const Offset(0, 18),
+            blurStyle: BlurStyle.inner,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF212121),
+            ),
+          ),
+          const SizedBox(height: 30),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInput(String label, {bool obscureText = false}) {
+    return TextField(
+      obscureText: obscureText,
+      style: const TextStyle(color: Color(0xFF212121), fontSize: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF757575)),
+        floatingLabelStyle: const TextStyle(color: Color(0xFF3FA168)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF9E9E9E), width: 1.5),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFF3FA168), width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.all(16),
       ),
     );
   }
