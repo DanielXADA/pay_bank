@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:pay_bank/widgets/bouncing_button.dart';
 import 'dart:ui';
 import 'dart:math' as math;
+import '../../database/db_helper.dart';
 
 class CadastroPage extends StatefulWidget {
   const CadastroPage({super.key});
@@ -13,6 +16,17 @@ class CadastroPage extends StatefulWidget {
 class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMixin {
   late final AnimationController _controller1;
   late final AnimationController _controller2;
+
+  final _nomeController = TextEditingController();
+  final _userController = TextEditingController();
+  final _cpfController = TextEditingController();
+  final _enderecoController = TextEditingController();
+  final _telefoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _senhaController = TextEditingController();
+
+  var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
+  var foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
 
   @override
   void initState() {
@@ -32,6 +46,13 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
   void dispose() {
     _controller1.dispose();
     _controller2.dispose();
+    _nomeController.dispose();
+    _userController.dispose();
+    _cpfController.dispose();
+    _enderecoController.dispose();
+    _telefoneController.dispose();
+    _emailController.dispose();
+    _senhaController.dispose();
     super.dispose();
   }
 
@@ -113,17 +134,19 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                   context,
                   title: "Criar Conta",
                   children: [
-                    _buildInput("Nome Completo"),
+                    _buildInput("Nome Completo", _nomeController),
                     const SizedBox(height: 16),
-                    _buildInput("CPF"),
+                    _buildInput("Nome de Usuário (@)", _userController),
                     const SizedBox(height: 16),
-                    _buildInput("Endereço"),
+                    _buildInput("CPF", _cpfController, keyboardType: TextInputType.number, inputFormatters: [cpfMask]),
                     const SizedBox(height: 16),
-                    _buildInput("Telefone"),
+                    _buildInput("Endereço", _enderecoController),
                     const SizedBox(height: 16),
-                    _buildInput("E-mail"),
+                    _buildInput("Telefone", _telefoneController, keyboardType: TextInputType.phone, inputFormatters: [foneMask]),
                     const SizedBox(height: 16),
-                    _buildInput("Senha", obscureText: true),
+                    _buildInput("E-mail", _emailController, keyboardType: TextInputType.emailAddress),
+                    const SizedBox(height: 16),
+                    _buildInput("Senha (Apenas 6 números)", _senhaController, obscureText: true, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                     const SizedBox(height: 30),
                     BouncingButton(
                       style: ElevatedButton.styleFrom(
@@ -133,8 +156,50 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.pushReplacementNamed(context, '/principal');
+                      onPressed: () async {
+                        if (_nomeController.text.isEmpty || _userController.text.isEmpty || _cpfController.text.length < 14 || _senhaController.text.length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Preencha todos os campos corretamente! Senha precisa de 6 números.')),
+                          );
+                          return;
+                        }
+
+                        try {
+                          final geradorAleatorio = math.Random();
+                          final numeroContaGerado = '${geradorAleatorio.nextInt(90000) + 10000}-${geradorAleatorio.nextInt(9)}';
+
+                          final db = DatabaseHelper.instance;
+                          
+                          Map<String, dynamic> novoUsuario = {
+                            'nome': _nomeController.text,
+                            'nome_usuario': _userController.text.trim(),
+                            'senha': _senhaController.text.trim(),
+                            'email': _emailController.text,
+                            'telefone': _telefoneController.text,
+                            'cpf': _cpfController.text,
+                            'data_nascimento': '01/01/2000',
+                            'endereco': _enderecoController.text,
+                            'cep': '66000-000',
+                            'agencia': '0001',
+                            'numero_conta': numeroContaGerado,
+                            'saldo': 0.0,
+                          };
+
+                          await db.gravarUsuario(novoUsuario);
+
+                          if (!mounted) return;
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Conta criada com sucesso! Faça seu Login.')),
+                          );
+
+                          Navigator.pushReplacementNamed(context, '/login');
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Erro ao salvar. Usuário ou CPF já existem: $e')),
+                          );
+                        }
                       },
                       child: const Text(
                         "Cadastrar",
@@ -195,9 +260,12 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildInput(String label, {bool obscureText = false}) {
+  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters}) {
     return TextField(
+      controller: controller,
       obscureText: obscureText,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       style: const TextStyle(color: Color(0xFF212121), fontSize: 16),
       decoration: InputDecoration(
         labelText: label,

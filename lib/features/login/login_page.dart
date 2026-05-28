@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pay_bank/widgets/bouncing_button.dart';
 import 'dart:ui';
 import 'dart:math' as math;
+import '../../database/db_helper.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,6 +14,9 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   late final AnimationController _controller1;
   late final AnimationController _controller2;
+
+  final _usuarioController = TextEditingController();
+  final _senhaController = TextEditingController();
 
   @override
   void initState() {
@@ -32,6 +36,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void dispose() {
     _controller1.dispose();
     _controller2.dispose();
+    _usuarioController.dispose();
+    _senhaController.dispose();
     super.dispose();
   }
 
@@ -110,9 +116,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 context,
                 title: "Entrar",
                 children: [
-                  _buildInput("E-mail"),
+                  _buildInput("Nome de Usuário (@)", _usuarioController),
                   const SizedBox(height: 20),
-                  _buildInput("Senha", obscureText: true),
+                  _buildInput("Senha", _senhaController, obscureText: true, keyboardType: TextInputType.number),
                   const SizedBox(height: 30),
                   BouncingButton(
                     style: ElevatedButton.styleFrom(
@@ -122,8 +128,33 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/principal');
+                    onPressed: () async {
+                      final username = _usuarioController.text.trim();
+                      final senha = _senhaController.text.trim();
+
+                      if (username.isEmpty || senha.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Por favor, preencha todos os campos!')),
+                        );
+                        return;
+                      }
+
+                      final bancoDados = DatabaseHelper.instance;
+                      final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(username);
+
+                      if (!mounted) return;
+
+                      if (usuarioBanco != null && usuarioBanco['senha'] == senha) {
+                        Navigator.pushReplacementNamed(
+                          context, 
+                          '/principal',
+                          arguments: usuarioBanco,
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Usuário ou senha incorretos!')),
+                        );
+                      }
                     },
                     child: const Text(
                       "Entrar",
@@ -183,9 +214,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildInput(String label, {bool obscureText = false}) {
+  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType}) {
     return TextField(
+      controller: controller,
       obscureText: obscureText,
+      keyboardType: keyboardType,
       style: const TextStyle(color: Color(0xFF212121), fontSize: 16),
       decoration: InputDecoration(
         labelText: label,

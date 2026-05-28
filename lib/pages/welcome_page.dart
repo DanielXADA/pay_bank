@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:pay_bank/widgets/bouncing_button.dart';
 import 'dart:ui';
 import 'dart:math' as math;
+import '../widgets/bouncing_button.dart';
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -120,7 +120,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Bem-vindo ao\nPagBank",
+                      "Bem-vindo ao\nPay Bank",
                       style: TextStyle(
                         fontSize: 40,
                         height: 1.1,
@@ -144,7 +144,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           builder: (context, child) {
                             final dy1 = _cardController.value * -12.0;
                             final dy2 = (1.0 - _cardController.value) * -12.0;
-                            
+
                             return Stack(
                               clipBehavior: Clip.none,
                               alignment: Alignment.center,
@@ -182,7 +182,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFD4F85A),
                         foregroundColor: Colors.black,
-                        splashFactory: NoSplash.splashFactory, // Remove a onda nativa
+                        splashFactory: NoSplash.splashFactory,
                         minimumSize: const Size(double.infinity, 56),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -202,7 +202,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                         backgroundColor: Colors.white.withOpacity(0.1),
                         foregroundColor: Colors.white,
                         elevation: 0,
-                        splashFactory: NoSplash.splashFactory, // Remove a onda nativa
+                        splashFactory: NoSplash.splashFactory,
                         minimumSize: const Size(double.infinity, 56),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -252,7 +252,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
             bottom: -50,
             left: -10,
             child: Text(
-              "pagbank",
+              "paybank",
               style: TextStyle(
                 fontSize: 85,
                 fontWeight: FontWeight.w900,
@@ -274,7 +274,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                   children: [
                     Icon(Icons.memory, color: textColor.withOpacity(0.6), size: 32),
                     Text(
-                      "pagbank",
+                      "pay bank",
                       style: TextStyle(
                         color: textColor,
                         fontWeight: FontWeight.bold,
@@ -325,7 +325,7 @@ class BalanceBadge extends StatelessWidget {
           ),
           child: const Center(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center, // 👈 Consertado bem aqui!
               children: [
                 Text(
                   "R\$ 2.537,98",
