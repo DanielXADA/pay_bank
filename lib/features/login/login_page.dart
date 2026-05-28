@@ -515,13 +515,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF32325D).withOpacity(0.25),
+            color: const Color(0xFF32325D).withValues(alpha: 0.25),
             blurRadius: 50,
             offset: const Offset(0, 30),
             blurStyle: BlurStyle.inner,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 26,
             offset: const Offset(0, 18),
             blurStyle: BlurStyle.inner,
