@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../database/db_helper.dart';
@@ -29,6 +28,18 @@ class _PrincipalPageState extends State<PrincipalPage> {
         _carregarDadosReal(dadosIniciais['nome_usuario']);
       }
     }
+  }
+
+  String _formatarMoedaPtBr(double valor) {
+    String valorFixo = valor.toStringAsFixed(2);
+    List<String> partes = valorFixo.split('.');
+    String inteira = partes[0];
+    String decimal = partes[1];
+
+    RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    inteira = inteira.replaceAllMapped(reg, (Match match) => '${match[1]}.');
+
+    return '$inteira,$decimal';
   }
 
   Future<void> _carregarDadosReal(String nomeUsuario) async {
@@ -127,14 +138,8 @@ class _PrincipalPageState extends State<PrincipalPage> {
     );
   }
 
-  void _compartilharComprovanteHistorico(
-    Map<String, dynamic> transferencia,
-  ) {
-    final valorFormatado = (transferencia['valor'] as num)
-        .toDouble()
-        .toStringAsFixed(2)
-        .replaceAll('.', ',');
-
+  void _compartilharComprovanteHistorico(Map<String, dynamic> transferencia) {
+    final valorFormatado = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
 
     final textoComprovante = '''
@@ -151,11 +156,7 @@ Data: ${transferencia['data']}
   }
 
   void _mostrarComprovanteAntigo(Map<String, dynamic> transferencia) {
-    final valorFormatado = (transferencia['valor'] as num)
-        .toDouble()
-        .toStringAsFixed(2)
-        .replaceAll('.', ',');
-
+    final valorFormatado = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
 
     showDialog(
@@ -225,7 +226,7 @@ Data: ${transferencia['data']}
     final numeroConta = _usuarioDados!['numero_conta'] ?? '00000-0';
 
     final saldoObtido = (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
-    final saldoFormatado = saldoObtido.toStringAsFixed(2).replaceAll('.', ',');
+    final saldoFormatado = _formatarMoedaPtBr(saldoObtido);
 
     return Scaffold(
       appBar: AppBar(
@@ -347,16 +348,12 @@ Data: ${transferencia['data']}
             )
           else
             ..._listaTransferencias.map((transferencia) {
-              final valorFormatadoItem = (transferencia['valor'] as num)
-                  .toDouble()
-                  .toStringAsFixed(2)
-                  .replaceAll('.', ',');
-
+              final valorFormatadoItem = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
               final ehEntrada = transferencia['tipo'] == 'ENTRADA';
 
               return ListTile(
                 leading: Icon(
-                  ehEntrada ? Icons.arrow_downward : Icons.arrow_upward,
+                  ehEntrada ? Icons.arrow_upward : Icons.arrow_downward,
                   color: ehEntrada ? Colors.green : Colors.red,
                 ),
                 title: Text(

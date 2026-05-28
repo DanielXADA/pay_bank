@@ -23,7 +23,11 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
   final _enderecoController = TextEditingController();
   final _telefoneController = TextEditingController();
   final _emailController = TextEditingController();
-  final _senhaController = TextEditingController();
+  final _senhaAcessoController = TextEditingController();
+  final _senhaTransacaoController = TextEditingController();
+
+  bool _ocultarSenhaAcesso = true;
+  bool _ocultarSenhaTransacao = true;
 
   var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
   var foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
@@ -52,7 +56,8 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
     _enderecoController.dispose();
     _telefoneController.dispose();
     _emailController.dispose();
-    _senhaController.dispose();
+    _senhaAcessoController.dispose();
+    _senhaTransacaoController.dispose();
     super.dispose();
   }
 
@@ -146,7 +151,29 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                     const SizedBox(height: 16),
                     _buildInput("E-mail", _emailController, keyboardType: TextInputType.emailAddress),
                     const SizedBox(height: 16),
-                    _buildInput("Senha (Apenas 6 números)", _senhaController, obscureText: true, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                    _buildInput(
+                      "Senha de Acesso (Até 8 dígitos)", 
+                      _senhaAcessoController, 
+                      obscureText: _ocultarSenhaAcesso,
+                      maxLength: 8,
+                      suffixIcon: IconButton(
+                        icon: Icon(_ocultarSenhaAcesso ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => _ocultarSenhaAcesso = !_ocultarSenhaAcesso),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInput(
+                      "Senha de Transação (6 números)", 
+                      _senhaTransacaoController, 
+                      obscureText: _ocultarSenhaTransacao, 
+                      keyboardType: TextInputType.number, 
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      maxLength: 6,
+                      suffixIcon: IconButton(
+                        icon: Icon(_ocultarSenhaTransacao ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setState(() => _ocultarSenhaTransacao = !_ocultarSenhaTransacao),
+                      ),
+                    ),
                     const SizedBox(height: 30),
                     BouncingButton(
                       style: ElevatedButton.styleFrom(
@@ -157,9 +184,13 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                         ),
                       ),
                       onPressed: () async {
-                        if (_nomeController.text.isEmpty || _userController.text.isEmpty || _cpfController.text.length < 14 || _senhaController.text.length < 6) {
+                        if (_nomeController.text.isEmpty || 
+                            _userController.text.isEmpty || 
+                            _cpfController.text.length < 14 || 
+                            _senhaAcessoController.text.isEmpty || 
+                            _senhaTransacaoController.text.length != 6) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Preencha todos os campos corretamente! Senha precisa de 6 números.')),
+                            const SnackBar(content: Text('Preencha todos os campos corretamente! A senha de acesso deve ter até 8 dígitos e a de transação exatamente 6 números.')),
                           );
                           return;
                         }
@@ -173,7 +204,8 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                           Map<String, dynamic> novoUsuario = {
                             'nome': _nomeController.text,
                             'nome_usuario': _userController.text.trim(),
-                            'senha': _senhaController.text.trim(),
+                            'senha': _senhaAcessoController.text.trim(),
+                            'senha_transacao': _senhaTransacaoController.text.trim(),
                             'email': _emailController.text,
                             'telefone': _telefoneController.text,
                             'cpf': _cpfController.text,
@@ -229,13 +261,13 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF32325D).withOpacity(0.25),
+            color: const Color(0xFF32325D).withValues(alpha: 0.25),
             blurRadius: 50,
             offset: const Offset(0, 30),
             blurStyle: BlurStyle.inner,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 26,
             offset: const Offset(0, 18),
             blurStyle: BlurStyle.inner,
@@ -260,17 +292,20 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters}) {
+  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, Widget? suffixIcon, int? maxLength}) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
+      maxLength: maxLength,
       style: const TextStyle(color: Color(0xFF212121), fontSize: 16),
       decoration: InputDecoration(
         labelText: label,
+        counterText: "",
         labelStyle: const TextStyle(color: Color(0xFF757575)),
         floatingLabelStyle: const TextStyle(color: Color(0xFF3FA168)),
+        suffixIcon: suffixIcon,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: Color(0xFF9E9E9E), width: 1.5),

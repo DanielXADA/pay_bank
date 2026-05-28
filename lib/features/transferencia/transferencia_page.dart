@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../database/db_helper.dart';
 
@@ -25,6 +26,18 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _usuarioRemetente ??= ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+  }
+
+  String _formatarMoedaPtBr(double valor) {
+    String valorFixo = valor.toStringAsFixed(2);
+    List<String> partes = valorFixo.split('.');
+    String inteira = partes[0];
+    String decimal = partes[1];
+
+    RegExp reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+    inteira = inteira.replaceAllMapped(reg, (Match match) => '${match[1]}.');
+
+    return '$inteira,$decimal';
   }
 
   String _mascararCpf(String cpf) {
@@ -130,44 +143,55 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   }
 
   void _solicitarSenhaEFinalizar() {
+    bool ocultarSenhaPix = true;
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Segurança'),
-          content: TextField(
-            controller: _controladorSenha,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Digite sua senha de acesso',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _controladorSenha.clear();
-                Navigator.pop(context);
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (_controladorSenha.text == _usuarioRemetente!['senha']) {
-                  Navigator.pop(context);
-                  _processarTransferenciaNoBanco();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Senha de acesso incorreta!')),
-                  );
-                }
-
-                _controladorSenha.clear();
-              },
-              child: const Text('Confirmar'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Segurança'),
+              content: TextField(
+                controller: _controladorSenha,
+                obscureText: ocultarSenhaPix,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                maxLength: 6,
+                decoration: InputDecoration(
+                  labelText: 'Digite sua senha de transação (6 números)',
+                  counterText: "",
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(ocultarSenhaPix ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setStateDialog(() => ocultarSenhaPix = !ocultarSenhaPix),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _controladorSenha.clear();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (_controladorSenha.text == _usuarioRemetente!['senha_transacao']) {
+                      Navigator.pop(context);
+                      _processarTransferenciaNoBanco();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Senha de transação incorreta!')),
+                      );
+                    }
+                    _controladorSenha.clear();
+                  },
+                  child: const Text('Confirmar'),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -243,8 +267,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   void _compartilharComprovante() {
     if (_usuarioRemetente == null || _usuarioRecebedor == null) return;
 
-    final valorFormatado =
-        _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+    final valorFormatado = _formatarMoedaPtBr(_valorTransferencia);
 
     final textoComprovante = '''
 Comprovante PIX - Pay Bank
@@ -339,8 +362,7 @@ ID da Transação: $_idTransacao
     }
 
     if (_passoAtual == 2) {
-      final valorFormatado =
-          _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+      final valorFormatado = _formatarMoedaPtBr(_valorTransferencia);
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,8 +435,7 @@ ID da Transação: $_idTransacao
       );
     }
 
-    final valorFormatado =
-        _valorTransferencia.toStringAsFixed(2).replaceAll('.', ',');
+    final valorFormatado = _formatarMoedaPtBr(_valorTransferencia);
 
     return SingleChildScrollView(
       child: Column(

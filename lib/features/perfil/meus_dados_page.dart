@@ -22,46 +22,57 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
   }
 
   void _verificarSenhaParaRevelar(Map<String, dynamic> dados) {
+    bool ocultarSenhaDialog = true;
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Confirmar Senha'),
-          content: TextField(
-            controller: _controladorSenha,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              labelText: 'Digite sua senha de acesso',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _controladorSenha.clear();
-                Navigator.pop(context);
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (_controladorSenha.text == dados['senha']) {
-                  setState(() {
-                    _dadosRevelados = true;
-                  });
-                  Navigator.pop(context);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Senha incorreta!')),
-                  );
-                }
-                _controladorSenha.clear();
-              },
-              child: const Text('Confirmar'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Confirmar Senha'),
+              content: TextField(
+                controller: _controladorSenha,
+                obscureText: ocultarSenhaDialog,
+                decoration: InputDecoration(
+                  labelText: 'Digite sua senha de acesso',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(ocultarSenhaDialog ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () {
+                      setStateDialog(() {
+                        ocultarSenhaDialog = !ocultarSenhaDialog;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _controladorSenha.clear();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_controladorSenha.text == dados['senha']) {
+                      setState(() {
+                        _dadosRevelados = true;
+                      });
+                      Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Senha incorreta!')),
+                      );
+                    }
+                    _controladorSenha.clear();
+                  },
+                  child: const Text('Confirmar'),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -96,17 +107,17 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
                   final bancoDados = DatabaseHelper.instance;
                   await bancoDados.atualizarUsuario(_usuarioDados!['id'], {coluna: novoValor});
                   
-                  final atualizado = await bancoDados.buscarUsuarioPorLogin(_usuarioDados!['nome_usuario']);
+                  final updated = await bancoDados.buscarUsuarioPorLogin(_usuarioDados!['nome_usuario']);
                   
                   if (!mounted) return;
 
                   setState(() {
-                    _usuarioDados = atualizado;
+                    _usuarioDados = updated;
                   });
                   
                   _controladorEdicao.clear();
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label updated!')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label atualizado!')));
                 }
               },
               child: const Text('Salvar'),
@@ -117,84 +128,189 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
     );
   }
 
-  void _mostrarDialogoAlterarSenha() {
-    final controladorNovaSenha = TextEditingController();
-    final controladorConfirmarNovaSenha = TextEditingController();
+  void _mostrarDialogoAlterarSenhaAcesso() {
+    final novaCtrl = TextEditingController();
+    final confirmaCtrl = TextEditingController();
+    bool ocultar1 = true;
+    bool ocultar2 = true;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Alterar Senha'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controladorNovaSenha,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Nova Senha (mínimo 6 números)',
-                  border: OutlineInputBorder(),
-                ),
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Alterar Senha de Acesso'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: novaCtrl,
+                    obscureText: ocultar1,
+                    maxLength: 8,
+                    decoration: InputDecoration(
+                      labelText: 'Nova Senha de Acesso (Max 8 dígitos)',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(ocultar1 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setStateDialog(() => ocultar1 = !ocultar1),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmaCtrl,
+                    obscureText: ocultar2,
+                    maxLength: 8,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmar Nova Senha',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(ocultar2 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setStateDialog(() => ocultar2 = !ocultar2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controladorConfirmarNovaSenha,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Confirmar Nova Senha',
-                  border: OutlineInputBorder(),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
                 ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final nova = novaCtrl.text.trim();
+                    final confirma = confirmaCtrl.text.trim();
+
+                    if (nova.isEmpty || nova.length > 8) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('A senha deve ter no máximo 8 caracteres!')),
+                      );
+                      return;
+                    }
+
+                    if (nova != confirma) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('As senhas não são iguais!')),
+                      );
+                      return;
+                    }
+
+                    final bancoDados = DatabaseHelper.instance;
+                    await bancoDados.atualizarUsuario(_usuarioDados!['id'], {'senha': nova});
+                    
+                    final updated = await bancoDados.buscarUsuarioPorLogin(_usuarioDados!['nome_usuario']);
+
+                    if (!mounted) return;
+                    setState(() => _usuarioDados = updated);
+
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Senha de acesso atualizada!')),
+                    );
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
+  }
+
+  void _mostrarDialogoAlterarSenhaTransacao() {
+    final novaCtrl = TextEditingController();
+    final confirmaCtrl = TextEditingController();
+    bool ocultar1 = true;
+    bool ocultar2 = true;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Alterar Senha de Transação'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: novaCtrl,
+                    obscureText: ocultar1,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      labelText: 'Nova Senha (Exatamente 6 números)',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(ocultar1 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setStateDialog(() => ocultar1 = !ocultar1),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmaCtrl,
+                    obscureText: ocultar2,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmar Nova Senha',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(ocultar2 ? Icons.visibility : Icons.visibility_off),
+                        onPressed: () => setStateDialog(() => ocultar2 = !ocultar2),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final nova = controladorNovaSenha.text.trim();
-                final confirma = controladorConfirmarNovaSenha.text.trim();
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final nova = novaCtrl.text.trim();
+                    final confirma = confirmaCtrl.text.trim();
 
-                if (nova.length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('A senha deve ter pelo menos 6 números!')),
-                  );
-                  return;
-                }
+                    if (nova.length != 6) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('A senha de transação precisa ter exatamente 6 números!')),
+                      );
+                      return;
+                    }
 
-                if (nova != confirma) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('As senhas não são iguais!')),
-                  );
-                  return;
-                }
+                    if (nova != confirma) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('As senhas não são iguais!')),
+                      );
+                      return;
+                    }
 
-                final bancoDados = DatabaseHelper.instance;
-                await bancoDados.atualizarUsuario(_usuarioDados!['id'], {'senha': nova});
-                
-                final atualizado = await bancoDados.buscarUsuarioPorLogin(_usuarioDados!['nome_usuario']);
+                    final bancoDados = DatabaseHelper.instance;
+                    await bancoDados.atualizarUsuario(_usuarioDados!['id'], {'senha_transacao': nova});
+                    
+                    final updated = await bancoDados.buscarUsuarioPorLogin(_usuarioDados!['nome_usuario']);
 
-                if (!mounted) return;
+                    if (!mounted) return;
+                    setState(() => _usuarioDados = updated);
 
-                setState(() {
-                  _usuarioDados = atualizado;
-                });
-
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Senha atualizada com sucesso!')),
-                );
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Senha de transação atualizada!')),
+                    );
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -259,12 +375,23 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
             ),
             const Divider(),
             ListTile(
-              title: const Text('Senha de Acesso'),
+              title: const Text('Senha de Acesso (Login)'),
               subtitle: const Text('********'),
               trailing: _dadosRevelados
                   ? IconButton(
                       icon: const Icon(Icons.edit, color: Colors.green),
-                      onPressed: _mostrarDialogoAlterarSenha,
+                      onPressed: _mostrarDialogoAlterarSenhaAcesso,
+                    )
+                  : null,
+            ),
+            const Divider(),
+            ListTile(
+              title: const Text('Senha de Transação (PIX)'),
+              subtitle: const Text('******'),
+              trailing: _dadosRevelados
+                  ? IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.green),
+                      onPressed: _mostrarDialogoAlterarSenhaTransacao,
                     )
                   : null,
             ),

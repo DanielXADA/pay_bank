@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3, // 👈 Subimos para a versão 3
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -32,6 +32,7 @@ class DatabaseHelper {
         nome TEXT NOT NULL,
         nome_usuario TEXT NOT NULL UNIQUE,
         senha TEXT NOT NULL,
+        senha_transacao TEXT, -- 👈 Nova senha de 6 dígitos numéricos
         email TEXT NOT NULL,
         telefone TEXT NOT NULL,
         cpf TEXT NOT NULL UNIQUE,
@@ -67,6 +68,13 @@ class DatabaseHelper {
       await db.execute('''
         ALTER TABLE transferencias 
         ADD COLUMN tipo TEXT NOT NULL DEFAULT 'SAIDA'
+      ''');
+    }
+    if (oldVersion < 3) {
+      // 👈 Se o app já existir, adiciona a nova coluna sem deletar nada
+      await db.execute('''
+        ALTER TABLE usuarios 
+        ADD COLUMN senha_transacao TEXT
       ''');
     }
   }
