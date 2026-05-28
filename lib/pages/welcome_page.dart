@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pay_bank/widgets/bouncing_button.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 
@@ -119,7 +120,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "Bem-vindo ao\nPayBank",
+                      "Bem-vindo ao\nPagBank",
                       style: TextStyle(
                         fontSize: 40,
                         height: 1.1,
@@ -143,7 +144,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           builder: (context, child) {
                             final dy1 = _cardController.value * -12.0;
                             final dy2 = (1.0 - _cardController.value) * -12.0;
-
+                            
                             return Stack(
                               clipBehavior: Clip.none,
                               alignment: Alignment.center,
@@ -177,10 +178,11 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                         ),
                       ),
                     ),
-                    ElevatedButton(
+                    BouncingButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFD4F85A),
                         foregroundColor: Colors.black,
+                        splashFactory: NoSplash.splashFactory, // Remove a onda nativa
                         minimumSize: const Size(double.infinity, 56),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -195,11 +197,12 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ElevatedButton(
+                    BouncingButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        backgroundColor: Colors.white.withOpacity(0.1),
                         foregroundColor: Colors.white,
                         elevation: 0,
+                        splashFactory: NoSplash.splashFactory, // Remove a onda nativa
                         minimumSize: const Size(double.infinity, 56),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(28),
@@ -236,7 +239,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(10, 15),
           )
@@ -254,9 +257,9 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                 fontSize: 85,
                 fontWeight: FontWeight.w900,
                 letterSpacing: -2.0,
-                color: isDarkText
-                    ? Colors.black.withValues(alpha: 0.06)
-                    : Colors.white.withValues(alpha: 0.1),
+                color: isDarkText 
+                    ? Colors.black.withOpacity(0.06) 
+                    : Colors.white.withOpacity(0.1),
               ),
             ),
           ),
@@ -269,7 +272,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.memory, color: textColor.withValues(alpha: 0.6), size: 32),
+                    Icon(Icons.memory, color: textColor.withOpacity(0.6), size: 32),
                     Text(
                       "pagbank",
                       style: TextStyle(
@@ -289,7 +292,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                       CircleAvatar(radius: 14, backgroundColor: logoColor),
                       Transform.translate(
                         offset: const Offset(-12, 0),
-                        child: CircleAvatar(radius: 14, backgroundColor: logoColor.withValues(alpha: 0.4)),
+                        child: CircleAvatar(radius: 14, backgroundColor: logoColor.withOpacity(0.4)),
                       ),
                     ],
                   ),
@@ -316,9 +319,9 @@ class BalanceBadge extends StatelessWidget {
           width: 120,
           height: 64,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
+            color: Colors.white.withOpacity(0.15),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.white.withOpacity(0.2)),
           ),
           child: const Center(
             child: Column(

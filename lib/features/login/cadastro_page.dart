@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pay_bank/widgets/bouncing_button.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 
@@ -124,7 +125,7 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                     const SizedBox(height: 16),
                     _buildInput("Senha", obscureText: true),
                     const SizedBox(height: 30),
-                    ElevatedButton(
+                    BouncingButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFD4F85A),
                         minimumSize: const Size(double.infinity, 50),
@@ -132,7 +133,9 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/principal');
+                      },
                       child: const Text(
                         "Cadastrar",
                         style: TextStyle(
