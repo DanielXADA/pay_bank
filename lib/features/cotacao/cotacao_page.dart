@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../services/cotacao_service.dart';
 
 class CotacaoPage extends StatefulWidget {
   const CotacaoPage({super.key});
@@ -9,234 +8,151 @@ class CotacaoPage extends StatefulWidget {
 }
 
 class _CotacaoPageState extends State<CotacaoPage> {
-  final CotacaoService cotacaoService = CotacaoService();
-  final TextEditingController valorController = TextEditingController();
+  final Color greenPrimary = const Color(0xFF1DB954);
+  final Color greenDark = const Color(0xFF191414);
+  final Color greyBackground = const Color(0xFFF8F9FA);
+  final Color greyText = const Color(0xFF6C757D);
 
-  bool carregando = true;
-  bool argumentosCarregados = false;
+  String _moedaAtiva = 'USD';
+  final TextEditingController _controllerConversor = TextEditingController();
+  double _resultadoConversao = 0.0;
 
-  String? erro;
-  Map<String, dynamic>? cotacoes;
-  String moedaSelecionada = 'USDBRL';
-  double? resultado;
-  DateTime? ultimaAtualizacao;
-
-  final Map<String, String> nomesMoedas = {
-    'USDBRL': 'Dólar',
-    'EURBRL': 'Euro',
-    'BTCBRL': 'Bitcoin',
+  final Map<String, double> _taxas = {
+    'USD': 5.24,
+    'EUR': 5.68,
+    'BTC': 342150.0,
+    'ETH': 18450.0,
   };
 
-  @override
-  void initState() {
-    super.initState();
-    carregarCotacoes();
-  }
+  final Map<String, dynamic> _moedasInfo = {
+    'USD': {'nome': 'Dólar Americano', 'icone': '🇺🇸', 'sigla': 'USD'},
+    'EUR': {'nome': 'Euro', 'icone': '🇪🇺', 'sigla': 'EUR'},
+    'BTC': {'nome': 'Bitcoin', 'icone': '₿', 'sigla': 'BTC'},
+    'ETH': {'nome': 'Ethereum', 'icone': '🔷', 'sigla': 'ETH'},
+  };
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (!argumentosCarregados) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-      final moedaInicial = args?['moedaInicial'];
-
-      if (moedaInicial != null && nomesMoedas.containsKey(moedaInicial)) {
-        moedaSelecionada = moedaInicial;
-      }
-
-      argumentosCarregados = true;
-    }
-  }
-
-  Future<void> carregarCotacoes() async {
+  void _calcularConversao(String valor) {
+    double valorEmReais = double.tryParse(valor.replaceAll(',', '.')) ?? 0.0;
     setState(() {
-      carregando = true;
-      erro = null;
+      _resultadoConversao = valorEmReais / (_taxas[_moedaAtiva] ?? 1.0);
     });
-
-    try {
-      final dados = await cotacaoService.buscarCotacoes();
-      if (!mounted) return;
-      setState(() {
-        cotacoes = dados;
-        ultimaAtualizacao = DateTime.now();
-        carregando = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        erro = 'Erro ao buscar cotações';
-        carregando = false;
-      });
-    }
-  }
-
-  void converterValor() {
-    final texto = valorController.text.replaceAll(',', '.');
-    final valorReais = double.tryParse(texto);
-
-    if (valorReais == null || cotacoes == null) {
-      setState(() {
-        resultado = null;
-      });
-      return;
-    }
-
-    final cotacao = double.parse(cotacoes![moedaSelecionada]['bid']);
-
-    setState(() {
-      resultado = valorReais / cotacao;
-    });
-  }
-
-  String formatarHora(DateTime data) {
-    final hora = data.hour.toString().padLeft(2, '0');
-    final minuto = data.minute.toString().padLeft(2, '0');
-    return '$hora:$minuto';
-  }
-
-  @override
-  void dispose() {
-    valorController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-    final titulo = args?['titulo'] ?? 'Cotação PayBank';
-
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(titulo),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Text('Cotações', style: TextStyle(color: greenDark, fontWeight: FontWeight.bold)),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: greenDark),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: carregando
-            ? const Center(child: CircularProgressIndicator())
-            : erro != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(erro!),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: carregarCotacoes,
-                          child: const Text('Tentar novamente'),
-                        ),
-                      ],
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Converter de Real (R\$) para:', style: TextStyle(color: greyText, fontSize: 12)),
+            const SizedBox(height: 15),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _moedasInfo.keys.map((String sigla) {
+                  bool ativa = _moedaAtiva == sigla;
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _moedaAtiva = sigla;
+                        _calcularConversao(_controllerConversor.text);
+                      });
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 15),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: ativa ? greenPrimary : greyBackground,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(sigla, style: TextStyle(color: ativa ? Colors.white : greenDark, fontWeight: FontWeight.bold)),
                     ),
-                  )
-                : ListView(
+                  );
+                }).toList(),
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            // --- CONVERSOR ADAPTADO (FUNDO VERDE E FORMATADO) ---
+            Container(
+              padding: const EdgeInsets.all(25),
+              decoration: BoxDecoration(
+                color: greenPrimary, // Fundo verde do banco
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _controllerConversor,
+                    onChanged: _calcularConversao,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: 'Valor em Reais (R\$)',
+                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                      border: InputBorder.none,
+                      prefixText: 'R\$ ',
+                      prefixStyle: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const Divider(color: Colors.white24),
+                  const SizedBox(height: 15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Câmbio Inteligente',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      const Text(
-                        'Consulte moedas em tempo real e simule conversões.',
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      if (ultimaAtualizacao != null)
-                        Text(
-                          'Atualizado às ${formatarHora(ultimaAtualizacao!)}',
-                        ),
-
-                      const SizedBox(height: 20),
-
-                      ...nomesMoedas.keys.map((codigo) {
-                        final moeda = cotacoes![codigo];
-
-                        return Card(
-                          child: ListTile(
-                            title: Text(nomesMoedas[codigo]!),
-                            subtitle: Text(
-                              '1 ${moeda['code']} = R\$ ${moeda['bid']}',
-                            ),
-                            trailing: Text('${moeda['pctChange']}%'),
-                          ),
-                        );
-                      }),
-
-                      const SizedBox(height: 20),
-
-                      DropdownButtonFormField<String>(
-                        initialValue: moedaSelecionada,
-                        decoration: const InputDecoration(
-                          labelText: 'Escolha a moeda',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: nomesMoedas.entries.map((item) {
-                          return DropdownMenuItem(
-                            value: item.key,
-                            child: Text(item.value),
-                          );
-                        }).toList(),
-                        onChanged: (valor) {
-                          setState(() {
-                            moedaSelecionada = valor!;
-                            resultado = null;
-                          });
-                        },
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      TextField(
-                        controller: valorController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Valor em reais',
-                          prefixText: 'R\$ ',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      ElevatedButton(
-                        onPressed: converterValor,
-                        child: const Text('Converter'),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      if (resultado != null)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              'Resultado: ${resultado!.toStringAsFixed(4)} ${cotacoes![moedaSelecionada]['code']}',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 16),
-
-                      OutlinedButton(
-                        onPressed: carregarCotacoes,
-                        child: const Text('Atualizar cotação'),
+                      const Text('Equivale a:', style: TextStyle(color: Colors.white, fontSize: 16)),
+                      Text(
+                        '${_resultadoConversao.toStringAsFixed(2).replaceAll('.', ',')} $_moedaAtiva', // Formatado para 2 casas decimais
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 40),
+
+            Text('Cotações de Hoje', style: TextStyle(color: greenDark, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            _buildMoedaCard('Dólar Americano', 'USD', 'R\$ 5,24', '+0.45%', true),
+            _buildMoedaCard('Euro', 'EUR', 'R\$ 5,68', '-0.12%', false),
+            _buildMoedaCard('Bitcoin', 'BTC', 'R\$ 342.150,00', '+2.81%', true),
+            _buildMoedaCard('Ethereum', 'ETH', 'R\$ 18.450,00', '+1.15%', true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoedaCard(String nome, String sigla, String valor, String variacao, bool subiu) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey[200]!, width: 2)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(children: [
+            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: greyBackground, shape: BoxShape.circle), child: Text(sigla == 'BTC' || sigla == 'ETH' ? '₿' : '\$', style: TextStyle(color: greenPrimary, fontSize: 20, fontWeight: FontWeight.bold))),
+            const SizedBox(width: 15),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(nome, style: TextStyle(color: greenDark, fontWeight: FontWeight.bold)), Text(sigla, style: TextStyle(color: greyText))]),
+          ]),
+          Text(valor, style: TextStyle(color: greenDark, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }

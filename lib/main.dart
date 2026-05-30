@@ -22,19 +22,22 @@ class PayBankApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Pay Bank',
       theme: ThemeData(
-        primarySwatch: Colors.green,
+        // Atualizado para o verde oficial do banco
+        primaryColor: const Color(0xFF1DB954),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1DB954)),
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const WelcomePage(),
-        '/login': (context) => const LoginPage(),
-        '/cadastro': (context) => const CadastroPage(),
-        '/principal': (context) => const PrincipalPage(),
-        '/cotacao': (context) => const CotacaoPage(),
-        '/transferencia': (context) => const TransferenciaPage(),
-        '/perfil': (context) => const PerfilPage(),
-        '/meus_dados': (context) => const MeusDadosPage(),
-        '/minhas_chaves': (context) => const MinhasChavesPage(),
+        // Removido o "const" das páginas para evitar erro caso algum arquivo não tenha suporte
+        '/': (context) => WelcomePage(),
+        '/login': (context) => LoginPage(),
+        '/cadastro': (context) => CadastroPage(),
+        '/principal': (context) => PrincipalPage(),
+        '/cotacao': (context) => CotacaoPage(),
+        '/transferencia': (context) => TransferenciaPage(),
+        '/perfil': (context) => PerfilPage(),
+        '/meus_dados': (context) => MeusDadosPage(),
+        '/minhas_chaves': (context) => MinhasChavesPage(),
       },
     );
   }
