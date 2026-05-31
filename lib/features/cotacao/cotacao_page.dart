@@ -32,7 +32,9 @@ class _CotacaoPageState extends State<CotacaoPage> {
   };
 
   void _calcularConversao(String valor) {
-    double valorEmReais = double.tryParse(valor.replaceAll(',', '.')) ?? 0.0;
+    // Agora aceita tanto ponto quanto vírgula e remove formatadores visuais
+    String valorLimpo = valor.replaceAll('.', '').replaceAll(',', '.');
+    double valorEmReais = double.tryParse(valorLimpo) ?? 0.0;
     setState(() {
       _resultadoConversao = valorEmReais / (_taxas[_moedaAtiva] ?? 1.0);
     });
@@ -86,11 +88,11 @@ class _CotacaoPageState extends State<CotacaoPage> {
 
             const SizedBox(height: 30),
 
-            // --- CONVERSOR ADAPTADO (FUNDO VERDE E FORMATADO) ---
+            // --- CONVERSOR ADAPTADO ---
             Container(
               padding: const EdgeInsets.all(25),
               decoration: BoxDecoration(
-                color: greenPrimary, // Fundo verde do banco
+                color: greenPrimary, 
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -114,9 +116,17 @@ class _CotacaoPageState extends State<CotacaoPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Equivale a:', style: TextStyle(color: Colors.white, fontSize: 16)),
-                      Text(
-                        '${_resultadoConversao.toStringAsFixed(2).replaceAll('.', ',')} $_moedaAtiva', // Formatado para 2 casas decimais
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 10),
+                      // Correção do OVERFLOW: O FittedBox encolhe o texto se for muito grande
+                      Expanded(
+                        child: FittedBox(
+                          alignment: Alignment.centerRight,
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${_resultadoConversao.toStringAsFixed(2).replaceAll('.', ',')} $_moedaAtiva',
+                            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ),
                     ],
                   ),
