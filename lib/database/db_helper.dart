@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3, // 👈 Subimos para a versão 3
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -32,7 +32,7 @@ class DatabaseHelper {
         nome TEXT NOT NULL,
         nome_usuario TEXT NOT NULL UNIQUE,
         senha TEXT NOT NULL,
-        senha_transacao TEXT, -- 👈 Nova senha de 6 dígitos numéricos
+        senha_transacao TEXT,
         email TEXT NOT NULL,
         telefone TEXT NOT NULL,
         cpf TEXT NOT NULL UNIQUE,
@@ -58,24 +58,84 @@ class DatabaseHelper {
         recebedor TEXT NOT NULL,
         valor REAL NOT NULL,
         data TEXT NOT NULL,
-        tipo TEXT NOT NULL DEFAULT 'SAIDA'
+        tipo TEXT NOT NULL DEFAULT 'SAIDA',
+        id_transacao TEXT,
+        pagador TEXT,
+        cpf_recebedor TEXT,
+        agencia_recebedor TEXT,
+        conta_recebedor TEXT
       )
     ''');
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      await db.execute('''
-        ALTER TABLE transferencias 
-        ADD COLUMN tipo TEXT NOT NULL DEFAULT 'SAIDA'
-      ''');
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'tipo',
+        "TEXT NOT NULL DEFAULT 'SAIDA'",
+      );
     }
+
     if (oldVersion < 3) {
-      // 👈 Se o app já existir, adiciona a nova coluna sem deletar nada
-      await db.execute('''
-        ALTER TABLE usuarios 
-        ADD COLUMN senha_transacao TEXT
-      ''');
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'usuarios',
+        'senha_transacao',
+        'TEXT',
+      );
+    }
+
+    if (oldVersion < 4) {
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'id_transacao',
+        'TEXT',
+      );
+
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'pagador',
+        'TEXT',
+      );
+
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'cpf_recebedor',
+        'TEXT',
+      );
+
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'agencia_recebedor',
+        'TEXT',
+      );
+
+      await _adicionarColunaSeNaoExistir(
+        db,
+        'transferencias',
+        'conta_recebedor',
+        'TEXT',
+      );
+    }
+  }
+
+  Future<void> _adicionarColunaSeNaoExistir(
+    Database db,
+    String tabela,
+    String coluna,
+    String definicao,
+  ) async {
+    final colunas = await db.rawQuery('PRAGMA table_info($tabela)');
+    final existe = colunas.any((c) => c['name'] == coluna);
+
+    if (!existe) {
+      await db.execute('ALTER TABLE $tabela ADD COLUMN $coluna $definicao');
     }
   }
 
@@ -110,9 +170,62 @@ class DatabaseHelper {
 
     if (maps.isNotEmpty) {
       return maps.first;
-    } else {
-      return null;
     }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> buscarUsuarioPorId(int id) async {
+    final db = await instance.database;
+
+    final maps = await db.query(
+      'usuarios',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.first;
+    }
+
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> buscarUsuarioPorChavePix({
+    required String tipo,
+    required String chave,
+  }) async {
+    final db = await instance.database;
+
+    String where;
+    List<dynamic> whereArgs;
+
+    if (tipo == 'CPF') {
+      where = 'cpf = ? AND chave_cpf_ativa = 1';
+      whereArgs = [chave];
+    } else if (tipo == 'Celular') {
+      where = 'telefone = ? AND chave_telefone_ativa = 1';
+      whereArgs = [chave];
+    } else if (tipo == 'E-mail') {
+      where = 'email = ? AND chave_email_ativa = 1';
+      whereArgs = [chave];
+    } else {
+      where = 'chave_aleatoria = ?';
+      whereArgs = [chave];
+    }
+
+    final resultado = await db.query(
+      'usuarios',
+      where: where,
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+
+    if (resultado.isNotEmpty) {
+      return resultado.first;
+    }
+
+    return null;
   }
 
   Future<int> gravarTransferencia(Map<String, dynamic> row) async {
@@ -120,8 +233,11 @@ class DatabaseHelper {
     return await db.insert('transferencias', row);
   }
 
-  Future<List<Map<String, dynamic>>> buscarTransferenciasDoUsuario(int idUsuario) async {
+  Future<List<Map<String, dynamic>>> buscarTransferenciasDoUsuario(
+    int idUsuario,
+  ) async {
     final db = await instance.database;
+
     return await db.query(
       'transferencias',
       where: 'id_usuario = ?',

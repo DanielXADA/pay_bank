@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:pay_bank/widgets/bouncing_button.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
 import 'dart:math' as math;
 import '../../database/db_helper.dart';
@@ -20,11 +22,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _usuarioController = TextEditingController();
   final _senhaController = TextEditingController();
 
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
   bool _ocultarSenha = true;
+  bool _autenticando = false;
+  String? _ultimoUsuarioSalvo;
 
   @override
   void initState() {
     super.initState();
+
     _controller1 = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -34,6 +41,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(seconds: 10),
     )..repeat();
+
+    _carregarUltimoUsuario();
   }
 
   @override
@@ -45,81 +54,129 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _dispararBiometriaSimulada() async {
-    final usernameDigitado = _usuarioController.text.trim();
+  Future<void> _carregarUltimoUsuario() async {
+    final prefs = await SharedPreferences.getInstance();
+    final usuarioSalvo = prefs.getString('ultimo_usuario');
 
-    if (usernameDigitado.isEmpty) {
+    if (!mounted) return;
+
+    setState(() {
+      _ultimoUsuarioSalvo = usuarioSalvo;
+
+      if (usuarioSalvo != null && usuarioSalvo.isNotEmpty) {
+        _usuarioController.text = usuarioSalvo;
+      }
+    });
+  }
+
+  Future<void> _salvarUltimoUsuario(String nomeUsuario) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ultimo_usuario', nomeUsuario);
+  }
+
+  Future<void> _fazerLoginNormal() async {
+    final username = _usuarioController.text.trim();
+    final senha = _senhaController.text.trim();
+
+    if (username.isEmpty || senha.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, digite seu Nome de Usuário antes de usar a biometria!')),
+        const SnackBar(content: Text('Por favor, preencha todos os campos!')),
       );
       return;
     }
 
     final bancoDados = DatabaseHelper.instance;
-    final usuario = await bancoDados.buscarUsuarioPorLogin(usernameDigitado);
-
-    if (usuario == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('O usuário @$usernameDigitado não foi encontrado no sistema!')),
-      );
-      return;
-    }
+    final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(username);
 
     if (!mounted) return;
 
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.fingerprint, size: 30, color: Colors.green),
-              SizedBox(width: 10),
-              Text('Autenticação'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Toque no sensor de biometria para acessar a conta de @$usernameDigitado.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black54),
-              ),
-              const SizedBox(height: 24),
-              const Icon(Icons.fingerprint, size: 60, color: Colors.green),
-              const SizedBox(height: 10),
-              const Text('Aguardando leitura...', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.red)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context); 
+    if (usuarioBanco != null && usuarioBanco['senha'] == senha) {
+      await _salvarUltimoUsuario(usuarioBanco['nome_usuario']);
 
-                Navigator.pushReplacementNamed(
-                  context, 
-                  '/principal',
-                  arguments: usuario,
-                );
+      if (!mounted) return;
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Bem-vindo de volta, ${usuario['nome']}!')),
-                );
-              },
-              child: const Text('Simular Toque', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-            ),
-          ],
+      Navigator.pushReplacementNamed(
+        context,
+        '/principal',
+        arguments: usuarioBanco,
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Usuário ou senha incorretos!')),
+      );
+    }
+  }
+
+  Future<void> _entrarComBiometria() async {
+    try {
+      setState(() {
+        _autenticando = true;
+      });
+
+      final dispositivoSuporta = await _localAuth.isDeviceSupported();
+      final podeVerificar = await _localAuth.canCheckBiometrics;
+
+      if (!dispositivoSuporta && !podeVerificar) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometria ou bloqueio de tela não disponível.'),
+          ),
         );
-      },
-    );
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final usuarioSalvo = prefs.getString('ultimo_usuario');
+
+      if (usuarioSalvo == null || usuarioSalvo.isEmpty) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Faça login com usuário e senha pelo menos uma vez.'),
+          ),
+        );
+        return;
+      }
+
+      final autenticado = await _localAuth.authenticate(
+        localizedReason: 'Confirme sua identidade para entrar no PayBank',
+      );
+
+      if (!autenticado) return;
+
+      final bancoDados = DatabaseHelper.instance;
+      final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(usuarioSalvo);
+
+      if (!mounted) return;
+
+      if (usuarioBanco == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Usuário salvo não encontrado.')),
+        );
+        return;
+      }
+
+      Navigator.pushReplacementNamed(
+        context,
+        '/principal',
+        arguments: usuarioBanco,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro na autenticação: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _autenticando = false;
+        });
+      }
+    }
   }
 
   void _mostrarDialogoEsqueciSenha() {
@@ -127,8 +184,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     final controladorCpf = TextEditingController();
     final controladorNascimento = TextEditingController();
 
-    var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
-    var dataMask = MaskTextInputFormatter(mask: '##/##/####', filter: {"#": RegExp(r'[0-9]')});
+    var cpfMask = MaskTextInputFormatter(
+      mask: '###.###.###-##',
+      filter: {"#": RegExp(r'[0-9]')},
+    );
+
+    var dataMask = MaskTextInputFormatter(
+      mask: '##/##/####',
+      filter: {"#": RegExp(r'[0-9]')},
+    );
 
     showDialog(
       context: context,
@@ -190,17 +254,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 final bancoDados = DatabaseHelper.instance;
                 final usuario = await bancoDados.buscarUsuarioPorLogin(username);
 
-                if (usuario != null && 
-                    usuario['cpf'] == cpf && 
+                if (usuario != null &&
+                    usuario['cpf'] == cpf &&
                     usuario['data_nascimento'] == nascimento) {
-                  
                   if (!mounted) return;
+
                   Navigator.pop(context);
                   _mostrarDialogoRedefinirSenhas(usuario['id']);
                 } else {
                   if (!mounted) return;
+
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Dados incorretos ou usuário não encontrado!')),
+                    const SnackBar(
+                      content: Text('Dados incorretos ou usuário não encontrado!'),
+                    ),
                   );
                 }
               },
@@ -235,7 +302,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Nova Senha de Acesso:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Nova Senha de Acesso:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: novaAcessoCtrl,
@@ -246,8 +316,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         border: const OutlineInputBorder(),
                         counterText: "",
                         suffixIcon: IconButton(
-                          icon: Icon(ocultarAcesso1 ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setStateDialog(() => ocultarAcesso1 = !ocultarAcesso1),
+                          icon: Icon(
+                            ocultarAcesso1
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setStateDialog(() {
+                              ocultarAcesso1 = !ocultarAcesso1;
+                            });
+                          },
                         ),
                       ),
                     ),
@@ -261,15 +339,26 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         border: const OutlineInputBorder(),
                         counterText: "",
                         suffixIcon: IconButton(
-                          icon: Icon(ocultarAcesso2 ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setStateDialog(() => ocultarAcesso2 = !ocultarAcesso2),
+                          icon: Icon(
+                            ocultarAcesso2
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setStateDialog(() {
+                              ocultarAcesso2 = !ocultarAcesso2;
+                            });
+                          },
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     const Divider(),
                     const SizedBox(height: 10),
-                    const Text('Nova Senha de Transação:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Nova Senha de Transação:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: novaTransacaoCtrl,
@@ -282,8 +371,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         border: const OutlineInputBorder(),
                         counterText: "",
                         suffixIcon: IconButton(
-                          icon: Icon(ocultarTrans1 ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setStateDialog(() => ocultarTrans1 = !ocultarTrans1),
+                          icon: Icon(
+                            ocultarTrans1
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setStateDialog(() {
+                              ocultarTrans1 = !ocultarTrans1;
+                            });
+                          },
                         ),
                       ),
                     ),
@@ -299,8 +396,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         border: const OutlineInputBorder(),
                         counterText: "",
                         suffixIcon: IconButton(
-                          icon: Icon(ocultarTrans2 ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setStateDialog(() => ocultarTrans2 = !ocultarTrans2),
+                          icon: Icon(
+                            ocultarTrans2
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setStateDialog(() {
+                              ocultarTrans2 = !ocultarTrans2;
+                            });
+                          },
                         ),
                       ),
                     ),
@@ -315,37 +420,52 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     final nTrans = novaTransacaoCtrl.text.trim();
                     final cTrans = confirmaTransacaoCtrl.text.trim();
 
-                    if (nAcesso.isEmpty || nAcesso.length > 8 || nAcesso != cAcesso) {
+                    if (nAcesso.isEmpty ||
+                        nAcesso.length > 8 ||
+                        nAcesso != cAcesso) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Verifique a senha de acesso! Ela deve ter até 8 dígitos e ser idêntica nos dois campos.')),
+                        const SnackBar(
+                          content: Text(
+                            'Verifique a senha de acesso.',
+                          ),
+                        ),
                       );
                       return;
                     }
 
                     if (nTrans.length != 6 || nTrans != cTrans) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Verifique a senha de transação! Ela precisa ter exatamente 6 números e ser idêntica nos dois campos.')),
+                        const SnackBar(
+                          content: Text(
+                            'A senha de transação precisa ter exatamente 6 números.',
+                          ),
+                        ),
                       );
                       return;
                     }
 
                     final bancoDados = DatabaseHelper.instance;
+
                     await bancoDados.atualizarUsuario(idUsuario, {
                       'senha': nAcesso,
                       'senha_transacao': nTrans,
                     });
 
                     if (!mounted) return;
+
                     Navigator.pop(context);
+
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Senhas redefinidas com sucesso!')),
+                      const SnackBar(
+                        content: Text('Senhas redefinidas com sucesso!'),
+                      ),
                     );
                   },
                   child: const Text('Redefinir Senhas'),
                 ),
               ],
             );
-          }
+          },
         );
       },
     );
@@ -429,13 +549,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   _buildInput("Nome de Usuário (@)", _usuarioController),
                   const SizedBox(height: 20),
                   _buildInput(
-                    "Senha de Acesso", 
-                    _senhaController, 
+                    "Senha de Acesso",
+                    _senhaController,
                     obscureText: _ocultarSenha,
                     maxLength: 8,
                     suffixIcon: IconButton(
-                      icon: Icon(_ocultarSenha ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _ocultarSenha = !_ocultarSenha),
+                      icon: Icon(
+                        _ocultarSenha ? Icons.visibility : Icons.visibility_off,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _ocultarSenha = !_ocultarSenha;
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -443,7 +569,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _mostrarDialogoEsqueciSenha,
-                      child: const Text('Esqueceu sua senha?', style: TextStyle(color: Colors.grey)),
+                      child: const Text(
+                        'Esqueceu sua senha?',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -455,34 +584,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    onPressed: () async {
-                      final username = _usuarioController.text.trim();
-                      final senha = _senhaController.text.trim();
-
-                      if (username.isEmpty || senha.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Por favor, preencha todos os campos!')),
-                        );
-                        return;
-                      }
-
-                      final bancoDados = DatabaseHelper.instance;
-                      final usuarioBanco = await bancoDados.buscarUsuarioPorLogin(username);
-
-                      if (!mounted) return;
-
-                      if (usuarioBanco != null && usuarioBanco['senha'] == senha) {
-                        Navigator.pushReplacementNamed(
-                          context, 
-                          '/principal',
-                          arguments: usuarioBanco,
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Usuário ou senha incorretos!')),
-                        );
-                      }
-                    },
+                    onPressed: _fazerLoginNormal,
                     child: const Text(
                       "Entrar",
                       style: TextStyle(
@@ -494,9 +596,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   ),
                   const SizedBox(height: 20),
                   IconButton(
-                    icon: const Icon(Icons.fingerprint, size: 45, color: Colors.white70),
-                    onPressed: _dispararBiometriaSimulada, 
+                    icon: Icon(
+                      Icons.fingerprint,
+                      size: 45,
+                      color: _autenticando ? Colors.grey : Colors.white70,
+                    ),
+                    onPressed: _autenticando ? null : _entrarComBiometria,
                   ),
+                  if (_ultimoUsuarioSalvo == null || _ultimoUsuarioSalvo!.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Faça login uma vez para ativar a biometria.',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -506,7 +620,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFormCard(BuildContext context, {required String title, required List<Widget> children}) {
+  Widget _buildFormCard(
+    BuildContext context, {
+    required String title,
+    required List<Widget> children,
+  }) {
     return Container(
       width: MediaQuery.of(context).size.width * 0.85,
       padding: const EdgeInsets.all(24),
@@ -546,7 +664,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, Widget? suffixIcon, int? maxLength}) {
+  Widget _buildInput(
+    String label,
+    TextEditingController controller, {
+    bool obscureText = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    Widget? suffixIcon,
+    int? maxLength,
+  }) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
