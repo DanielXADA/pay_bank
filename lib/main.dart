@@ -8,6 +8,7 @@ import 'features/transferencia/transferencia_page.dart';
 import 'features/perfil/perfil_page.dart';
 import 'features/perfil/meus_dados_page.dart';
 import 'features/perfil/minhas_chaves_page.dart';
+import 'features/perfil/alterar_senhas_page.dart';
 
 void main() {
   runApp(const PayBankApp());
@@ -22,13 +23,11 @@ class PayBankApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Pay Bank',
       theme: ThemeData(
-        // Atualizado para o verde oficial do banco
         primaryColor: const Color(0xFF1DB954),
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1DB954)),
       ),
       initialRoute: '/',
       routes: {
-        // Removido o "const" das páginas para evitar erro caso algum arquivo não tenha suporte
         '/': (context) => WelcomePage(),
         '/login': (context) => LoginPage(),
         '/cadastro': (context) => CadastroPage(),
@@ -38,6 +37,7 @@ class PayBankApp extends StatelessWidget {
         '/perfil': (context) => PerfilPage(),
         '/meus_dados': (context) => MeusDadosPage(),
         '/minhas_chaves': (context) => MinhasChavesPage(),
+        '/alterar_senhas': (context) => AlterarSenhasPage(),
       },
     );
   }

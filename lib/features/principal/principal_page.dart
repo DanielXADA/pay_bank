@@ -87,7 +87,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
               children: [
                 Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
                 const SizedBox(height: 25),
-                Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: greenPrimary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(Icons.account_balance_wallet_outlined, color: greenPrimary, size: 35)),
+                Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: greenPrimary.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(Icons.account_balance_wallet_outlined, color: greenPrimary, size: 35)),
                 const SizedBox(height: 20),
                 Text('Qual valor deseja depositar?', style: TextStyle(color: greenDark, fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 30),
@@ -233,7 +233,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)],
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 5)],
                 ),
                 child: Icon(
                   ehDeposito ? Icons.account_balance_wallet : (ehEntrada ? Icons.arrow_downward : Icons.arrow_upward),
@@ -324,7 +324,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
-                  BoxShadow(color: greenPrimary.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 10)),
+                  BoxShadow(color: greenPrimary.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 10)),
                 ],
               ),
               child: Column(
@@ -338,7 +338,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                     ),
                     child: Column(
                       children: [
-                        Text('Saldo Disponível', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14)),
+                        Text('Saldo Disponível', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14)),
                         const SizedBox(height: 10),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -356,7 +356,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                           onTap: () => setState(() => _saldoVisivel = !_saldoVisivel),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [

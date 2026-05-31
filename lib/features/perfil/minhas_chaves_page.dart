@@ -15,7 +15,7 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
   final Color greyBackground = const Color(0xFFF8F9FA);
   final Color greyText = const Color(0xFF6C757D);
 
-  List<Map<String, dynamic>> _chaves = [];
+  final List<Map<String, dynamic>> _chaves = [];
   bool _inicializado = false;
 
   @override
@@ -225,7 +225,7 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: greyBackground, width: 2)),
       child: Row(
         children: [
-          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: greenPrimary.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: greenPrimary)),
+          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: greenPrimary.withValues(alpha: 0.1), shape: BoxShape.circle), child: Icon(icon, color: greenPrimary)),
           const SizedBox(width: 15),
           Expanded(
             child: Column(

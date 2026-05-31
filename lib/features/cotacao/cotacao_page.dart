@@ -104,7 +104,7 @@ class _CotacaoPageState extends State<CotacaoPage> {
                     style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                     decoration: InputDecoration(
                       labelText: 'Valor em Reais (R\$)',
-                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.8)),
+                      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
                       border: InputBorder.none,
                       prefixText: 'R\$ ',
                       prefixStyle: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),

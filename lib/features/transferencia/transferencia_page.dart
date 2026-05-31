@@ -24,9 +24,7 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_usuarioDados == null) {
-      _usuarioDados = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    }
+    _usuarioDados ??= ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
   }
 
   // --- MÁSCARAS E TECLADOS ---
@@ -113,7 +111,7 @@ Comprovante gerado pelo aplicativo PayBank.
             children: [
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: greenPrimary.withOpacity(0.1), shape: BoxShape.circle),
+                decoration: BoxDecoration(color: greenPrimary.withValues(alpha: 0.1), shape: BoxShape.circle),
                 child: Icon(Icons.check_circle, size: 60, color: greenPrimary),
               ),
               const SizedBox(height: 20),
@@ -195,7 +193,7 @@ Comprovante gerado pelo aplicativo PayBank.
               decoration: BoxDecoration(
                 color: greenPrimary, 
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: greenPrimary.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
+                boxShadow: [BoxShadow(color: greenPrimary.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 5))],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -210,7 +208,7 @@ Comprovante gerado pelo aplicativo PayBank.
                   ),
                   Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), shape: BoxShape.circle),
                     child: const Icon(Icons.account_balance_wallet, color: Colors.white),
                   ),
                 ],
