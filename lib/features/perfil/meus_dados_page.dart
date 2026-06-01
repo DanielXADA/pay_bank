@@ -132,17 +132,16 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Digite sua senha para liberar a edição dos dados.',
+                    'Digite sua senha de acesso (8 dígitos) para liberar a edição.',
                     style: TextStyle(color: greyText, fontSize: 14),
                   ),
                   const SizedBox(height: 20),
                   TextField(
                     controller: controladorSenhaConfirmacao,
                     obscureText: ocultarSenha,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
+                    maxLength: 8,
                     decoration: InputDecoration(
-                      labelText: 'Senha de validação',
+                      labelText: 'Senha de Acesso',
                       labelStyle: TextStyle(color: greyText),
                       suffixIcon: IconButton(
                         icon: Icon(ocultarSenha ? Icons.visibility_off : Icons.visibility, color: greyText),
@@ -168,7 +167,7 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
                 ),
                 TextButton(
                   onPressed: () {
-                    String senhaDB = (_usuarioDados['senha_6'] ?? _usuarioDados['senha'] ?? '').toString();
+                    String senhaDB = (_usuarioDados['senha'] ?? '').toString();
                     if (controladorSenhaConfirmacao.text == senhaDB) {
                       Navigator.pop(context);
                       setState(() {
@@ -202,7 +201,7 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
       enderecoMontado += ' - ${_controladorBairro.text.trim()}';
     }
     if (_controladorCidade.text.trim().isNotEmpty) {
-      enderecoMontado += ', ${_controladorCidade.text.trim()}/${_controladorEstado.text.trim()}';
+      enderecoMontado += ', ${_controladorCidade.text.trim()}/${_controladorEstado.text.trim()}'; // 👈 Corrigido aqui!
     }
 
     final dadosAtualizados = {
@@ -227,7 +226,7 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
       Navigator.pop(context);
     }
   }
-
+  
   void _mostrarMensagem(String texto) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }

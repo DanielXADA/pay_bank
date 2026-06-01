@@ -282,13 +282,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   void _mostrarDialogoRedefinirSenhas(int idUsuario) {
     final novaAcessoCtrl = TextEditingController();
     final confirmaAcessoCtrl = TextEditingController();
-    final novaTransacaoCtrl = TextEditingController();
-    final confirmaTransacaoCtrl = TextEditingController();
 
     bool ocultarAcesso1 = true;
     bool ocultarAcesso2 = true;
-    bool ocultarTrans1 = true;
-    bool ocultarTrans2 = true;
 
     showDialog(
       context: context,
@@ -297,16 +293,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('Redefinir Senhas'),
+              title: const Text('Redefinir Senha de Acesso'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Nova Senha de Acesso:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      'Crie sua nova senha de login:',
+                      style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: novaAcessoCtrl,
                       obscureText: ocultarAcesso1,
@@ -317,9 +313,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         counterText: "",
                         suffixIcon: IconButton(
                           icon: Icon(
-                            ocultarAcesso1
-                                ? Icons.visibility
-                                : Icons.visibility_off,
+                            ocultarAcesso1 ? Icons.visibility : Icons.visibility_off,
                           ),
                           onPressed: () {
                             setStateDialog(() {
@@ -335,14 +329,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       obscureText: ocultarAcesso2,
                       maxLength: 8,
                       decoration: InputDecoration(
-                        labelText: 'Confirmar Senha de Acesso',
+                        labelText: 'Confirmar Nova Senha',
                         border: const OutlineInputBorder(),
                         counterText: "",
                         suffixIcon: IconButton(
                           icon: Icon(
-                            ocultarAcesso2
-                                ? Icons.visibility
-                                : Icons.visibility_off,
+                            ocultarAcesso2 ? Icons.visibility : Icons.visibility_off,
                           ),
                           onPressed: () {
                             setStateDialog(() {
@@ -352,94 +344,29 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Nova Senha de Transação:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: novaTransacaoCtrl,
-                      obscureText: ocultarTrans1,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      maxLength: 6,
-                      decoration: InputDecoration(
-                        labelText: 'Nova Senha (6 números)',
-                        border: const OutlineInputBorder(),
-                        counterText: "",
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            ocultarTrans1
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () {
-                            setStateDialog(() {
-                              ocultarTrans1 = !ocultarTrans1;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmaTransacaoCtrl,
-                      obscureText: ocultarTrans2,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      maxLength: 6,
-                      decoration: InputDecoration(
-                        labelText: 'Confirmar Senha de Transação',
-                        border: const OutlineInputBorder(),
-                        counterText: "",
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            ocultarTrans2
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                          ),
-                          onPressed: () {
-                            setStateDialog(() {
-                              ocultarTrans2 = !ocultarTrans2;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
               actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar', style: TextStyle(color: Colors.red)),
+                ),
                 ElevatedButton(
                   onPressed: () async {
                     final nAcesso = novaAcessoCtrl.text.trim();
                     final cAcesso = confirmaAcessoCtrl.text.trim();
-                    final nTrans = novaTransacaoCtrl.text.trim();
-                    final cTrans = confirmaTransacaoCtrl.text.trim();
 
-                    if (nAcesso.isEmpty ||
-                        nAcesso.length > 8 ||
-                        nAcesso != cAcesso) {
+                    if (nAcesso.isEmpty || nAcesso.length > 8) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Verifique a senha de acesso.',
-                          ),
-                        ),
+                        const SnackBar(content: Text('A senha deve ter até 8 dígitos.')),
                       );
                       return;
                     }
 
-                    if (nTrans.length != 6 || nTrans != cTrans) {
+                    if (nAcesso != cAcesso) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'A senha de transação precisa ter exatamente 6 números.',
-                          ),
-                        ),
+                        const SnackBar(content: Text('As senhas digitadas não são iguais.')),
                       );
                       return;
                     }
@@ -448,7 +375,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
                     await bancoDados.atualizarUsuario(idUsuario, {
                       'senha': nAcesso,
-                      'senha_transacao': nTrans,
                     });
 
                     if (!mounted) return;
@@ -456,12 +382,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     Navigator.pop(context);
 
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Senhas redefinidas com sucesso!'),
-                      ),
+                      const SnackBar(content: Text('Senha de acesso redefinida com sucesso!')),
                     );
                   },
-                  child: const Text('Redefinir Senhas'),
+                  child: const Text('Redefinir Senha'),
                 ),
               ],
             );
@@ -603,6 +527,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                     onPressed: _autenticando ? null : _entrarComBiometria,
                   ),
+                  // ... (Mantenha o bloco do IconButton da biometria e o texto de aviso dela aqui em cima)
                   if (_ultimoUsuarioSalvo == null || _ultimoUsuarioSalvo!.isEmpty)
                     const Padding(
                       padding: EdgeInsets.only(top: 4),
@@ -611,6 +536,36 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         style: TextStyle(color: Colors.white70, fontSize: 11),
                       ),
                     ),
+                    
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "Não tem uma conta? ",
+                        style: TextStyle(color: Color(0xFF616161), fontSize: 14),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/cadastro');
+                        },
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          "Cadastre-se aqui",
+                          style: TextStyle(
+                            color: Color(0xFF3FA168),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
                 ],
               ),
             ),

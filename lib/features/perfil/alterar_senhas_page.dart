@@ -44,7 +44,7 @@ class _AlterarSenhasPageState extends State<AlterarSenhasPage> {
     final db = await dbHelper.database;
     await db.update(
       'usuarios',
-      {'senha_6': _controladorSenha6.text.trim()},
+      {'senha_transacao': _controladorSenha6.text.trim()},
       where: 'id = ?',
       whereArgs: [_usuarioDados['id']],
     );
