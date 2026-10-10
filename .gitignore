@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Oracle / JDK (Ignorando a pasta do Java)
+oracle*/
+oracleJdk*/
