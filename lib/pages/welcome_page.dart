@@ -324,26 +324,35 @@ class BalanceBadge extends StatelessWidget {
             border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
           ),
           child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center, // 👈 Consertado bem aqui!
-              children: [
-                Text(
-                  "R\$ 2.537,98",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "R\$ 2.537,98",
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      "Saldo",
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  "Saldo",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

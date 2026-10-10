@@ -2,8 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../database/db_helper.dart';
+import '../../data/models/user_model.dart';
+import '../../presentation/viewmodels/home_viewmodel.dart';
 
+/// View puramente declarativa no padrão MVVM.
+///
+/// Não executa queries SQLite diretamente nem calcula saldo em memória.
+/// Observa o [HomeViewModel], que consulta o Snapshot CQRS e realiza depósitos atômicos no Ledger.
 class PrincipalPage extends StatefulWidget {
   const PrincipalPage({super.key});
 
@@ -12,29 +17,77 @@ class PrincipalPage extends StatefulWidget {
 }
 
 class _PrincipalPageState extends State<PrincipalPage> {
-  Map<String, dynamic>? _usuarioDados;
-  List<Map<String, dynamic>> _listaTransferencias = [];
+  late final HomeViewModel _viewModel;
   final _controladorDeposito = TextEditingController();
-  bool _carregando = true;
-  bool _saldoVisivel = true;
 
   final Color greenPrimary = const Color(0xFF1DB954);
   final Color greenDark = const Color(0xFF191414);
   final Color greyBackground = const Color(0xFFF8F9FA);
   final Color greyText = const Color(0xFF6C757D);
 
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = HomeViewModel();
+    _viewModel.addListener(_onViewModelChanged);
+  }
+
+  void _onViewModelChanged() {
+    if (!mounted) return;
+
+    if (_viewModel.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_viewModel.errorMessage!),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      _viewModel.clearError();
+    } else if (_viewModel.successMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 10),
+              Text(
+                _viewModel.successMessage!,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          backgroundColor: greenPrimary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      );
+      _viewModel.clearSuccess();
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    if (_usuarioDados == null) {
-      final dadosIniciais =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-      if (dadosIniciais != null) {
-        _carregarDadosReal(dadosIniciais['nome_usuario']);
+    if (!_initialized) {
+      _initialized = true;
+      final dadosIniciais = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (dadosIniciais != null && dadosIniciais['nome_usuario'] != null) {
+        _viewModel.loadUserData(dadosIniciais['nome_usuario']);
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _controladorDeposito.dispose();
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
+    super.dispose();
   }
 
   String _formatarMoedaPtBr(double valor) {
@@ -54,31 +107,11 @@ class _PrincipalPageState extends State<PrincipalPage> {
     return '***.${cpf.substring(4, 7)}.***-**';
   }
 
-  Future<void> _carregarDadosReal(String nomeUsuario) async {
-    final bancoDados = DatabaseHelper.instance;
-    final usuarioAtualizado =
-        await bancoDados.buscarUsuarioPorLogin(nomeUsuario);
-
-    if (usuarioAtualizado != null) {
-      final transferencias =
-          await bancoDados.buscarTransferenciasDoUsuario(usuarioAtualizado['id']);
-
-      if (mounted) {
-        setState(() {
-          _usuarioDados = usuarioAtualizado;
-          _listaTransferencias = transferencias;
-          _carregando = false;
-        });
-      }
-    }
-  }
-
   Widget _fotoPerfilHome() {
-    final caminhoFoto = _usuarioDados?['foto_rosto'];
+    final caminhoFoto = _viewModel.currentUser?.facePhotoPath;
 
-    if (caminhoFoto != null && caminhoFoto.toString().isNotEmpty) {
+    if (caminhoFoto != null && caminhoFoto.isNotEmpty) {
       final arquivo = File(caminhoFoto);
-
       if (arquivo.existsSync()) {
         return CircleAvatar(radius: 18, backgroundImage: FileImage(arquivo));
       }
@@ -98,10 +131,10 @@ class _PrincipalPageState extends State<PrincipalPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (bottomSheetContext) {
         return Padding(
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+            bottom: MediaQuery.of(bottomSheetContext).viewInsets.bottom,
           ),
           child: Container(
             padding: const EdgeInsets.all(24),
@@ -150,8 +183,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                   child: IntrinsicWidth(
                     child: TextField(
                       controller: _controladorDeposito,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [CentavosInputFormatter()],
                       autofocus: true,
                       style: TextStyle(
@@ -192,64 +224,9 @@ class _PrincipalPageState extends State<PrincipalPage> {
 
                       final valorDeposito = double.tryParse(textoValor);
 
-                      if (valorDeposito != null &&
-                          valorDeposito > 0 &&
-                          _usuarioDados != null) {
-                        final bancoDados = DatabaseHelper.instance;
-                        final banco = await bancoDados.database;
-
-                        final saldoAntigo =
-                            (_usuarioDados!['saldo'] as num?)?.toDouble() ??
-                                0.0;
-
-                        final agora = DateTime.now();
-
-                        await banco.insert('transferencias', {
-                          'id_usuario': _usuarioDados!['id'],
-                          'tipo': 'ENTRADA',
-                          'recebedor': 'Depósito em Conta',
-                          'pagador': _usuarioDados!['nome'],
-                          'valor': valorDeposito,
-                          'data': agora.toString().substring(0, 19),
-                          'id_transacao': 'D${agora.millisecondsSinceEpoch}',
-                        });
-
-                        await banco.update(
-                          'usuarios',
-                          {'saldo': saldoAntigo + valorDeposito},
-                          where: 'id = ?',
-                          whereArgs: [_usuarioDados!['id']],
-                        );
-
-                        _carregarDadosReal(_usuarioDados!['nome_usuario']);
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Row(
-                                children: [
-                                  Icon(Icons.check_circle, color: Colors.white),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    'Depósito realizado com sucesso!',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: greenPrimary,
-                              behavior: SnackBarBehavior.floating,
-                              duration: const Duration(seconds: 3),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          );
-                        }
+                      if (valorDeposito != null && valorDeposito > 0) {
+                        Navigator.pop(bottomSheetContext);
+                        await _viewModel.deposit(valorDeposito);
                       }
                     },
                     child: const Text(
@@ -271,9 +248,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
   }
 
   void _compartilharComprovanteHistorico(Map<String, dynamic> transferencia) {
-    final valorFormatado =
-        _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
-
+    final valorFormatado = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
     final ehDeposito = transferencia['recebedor'] == 'Depósito em Conta';
 
@@ -292,16 +267,15 @@ ID: ${transferencia['id_transacao'] ?? 'Não informado'}
   }
 
   void _mostrarComprovanteAntigo(Map<String, dynamic> transferencia) {
-    final valorFormatado =
-        _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
-
+    final valorFormatado = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
     final ehDeposito = transferencia['recebedor'] == 'Depósito em Conta';
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogCtx) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
             ehDeposito ? 'Comprovante de Depósito' : 'Comprovante de PIX',
           ),
@@ -362,7 +336,7 @@ ID: ${transferencia['id_transacao'] ?? 'Não informado'}
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: Text('Fechar', style: TextStyle(color: greyText)),
             ),
           ],
@@ -372,9 +346,7 @@ ID: ${transferencia['id_transacao'] ?? 'Não informado'}
   }
 
   Widget _buildTransactionItem(Map<String, dynamic> transferencia) {
-    final valorFormatadoItem =
-        _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
-
+    final valorFormatadoItem = _formatarMoedaPtBr((transferencia['valor'] as num).toDouble());
     final ehEntrada = transferencia['tipo'] == 'ENTRADA';
     final ehDeposito = transferencia['recebedor'] == 'Depósito em Conta';
 
@@ -467,257 +439,259 @@ ID: ${transferencia['id_transacao'] ?? 'Não informado'}
   }
 
   @override
-  void dispose() {
-    _controladorDeposito.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_carregando || _usuarioDados == null) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(color: greenPrimary),
-        ),
-      );
-    }
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) {
+        if (_viewModel.isLoading || _viewModel.currentUser == null) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: CircularProgressIndicator(color: greenPrimary),
+            ),
+          );
+        }
 
-    final saldoObtido = (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
-    final saldoFormatado = _formatarMoedaPtBr(saldoObtido);
+        final user = _viewModel.currentUser!;
+        final saldoFormatado = _viewModel.balance.formattedWithoutSymbol;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          padding: EdgeInsets.zero,
-          icon: _fotoPerfilHome(),
-          onPressed: () {
-            Navigator.pushNamed(
-              context,
-              '/perfil',
-              arguments: _usuarioDados,
-            ).then((_) {
-              _carregarDadosReal(_usuarioDados!['nome_usuario']);
-            });
-          },
-        ),
-        title: Text(
-          'Olá, ${_usuarioDados!['nome'].split(' ')[0]}',
-          style: TextStyle(
-            color: greenDark,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+        final userMap = UserModel.fromDomain(user).toMap();
+        userMap['id'] = user.id;
+        userMap['saldo'] = _viewModel.balance.toDouble();
+
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              padding: EdgeInsets.zero,
+              icon: _fotoPerfilHome(),
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  '/perfil',
+                  arguments: userMap,
+                ).then((_) {
+                  _viewModel.loadUserData(user.username);
+                });
+              },
+            ),
+            title: Text(
+              'Olá, ${user.name.split(' ')[0]}',
+              style: TextStyle(
+                color: greenDark,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.exit_to_app, color: greyText),
+                onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+              ),
+            ],
           ),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.exit_to_app, color: greyText),
-            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20.0,
-          vertical: 10.0,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: greenPrimary.withValues(alpha: 0.15),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
+          body: RefreshIndicator(
+            color: greenPrimary,
+            onRefresh: () => _viewModel.loadUserData(user.username),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 10.0,
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 30,
-                      horizontal: 20,
-                    ),
                     decoration: BoxDecoration(
-                      color: greenPrimary,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(30),
-                      ),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: greenPrimary.withValues(alpha: 0.15),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
-                        Text(
-                          'Saldo Disponível',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            fontSize: 14,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 30,
+                            horizontal: 20,
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            const Text(
-                              'R\$ ',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          decoration: BoxDecoration(
+                            color: greenPrimary,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(30),
                             ),
-                            Text(
-                              _saldoVisivel ? saldoFormatado : '••••••',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 40,
-                                fontWeight: FontWeight.bold,
-                                height: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 15),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _saldoVisivel = !_saldoVisivel;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _saldoVisivel
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                  color: Colors.white,
-                                  size: 16,
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Saldo Disponível',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: 14,
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  _saldoVisivel ? 'Ocultar' : 'Mostrar',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'R\$ ',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    _viewModel.isBalanceVisible ? saldoFormatado : '••••••',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 40,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 15),
+                              GestureDetector(
+                                onTap: _viewModel.toggleBalanceVisibility,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _viewModel.isBalanceVisible
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        _viewModel.isBalanceVisible ? 'Ocultar' : 'Mostrar',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildActionItem(
+                                Icons.account_balance_wallet,
+                                'Depositar',
+                                _mostrarCaixaDeposito,
+                              ),
+                              _buildActionItem(Icons.pix, 'Transferir', () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/transferencia',
+                                  arguments: userMap,
+                                ).then((_) {
+                                  _viewModel.loadUserData(user.username);
+                                });
+                              }),
+                              _buildActionItem(
+                                Icons.monetization_on,
+                                'Cotações',
+                                () => Navigator.pushNamed(
+                                  context,
+                                  '/cotacao',
+                                  arguments: {
+                                    'titulo': 'Cotações',
+                                    'moedaInicial': 'USD',
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Últimas Transações',
+                        style: TextStyle(
+                          color: greenDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ExtratoCompletoPage(
+                                transferencias: _viewModel.legacyTransfers,
+                                buildItemFunction: _buildTransactionItem,
+                              ),
                             ),
+                          );
+                        },
+                        child: Text(
+                          'Ver Tudo',
+                          style: TextStyle(
+                            color: greyText,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildActionItem(
-                          Icons.account_balance_wallet,
-                          'Depositar',
-                          _mostrarCaixaDeposito,
+                  const SizedBox(height: 10),
+                  if (_viewModel.legacyTransfers.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 30.0),
+                        child: Text(
+                          'Nenhuma transferência ainda.',
+                          style: TextStyle(color: greyText),
                         ),
-                        _buildActionItem(Icons.pix, 'Transferir', () {
-                          Navigator.pushNamed(
-                            context,
-                            '/transferencia',
-                            arguments: _usuarioDados,
-                          ).then((_) {
-                            _carregarDadosReal(
-                              _usuarioDados!['nome_usuario'],
-                            );
-                          });
-                        }),
-                        _buildActionItem(
-                          Icons.monetization_on,
-                          'Cotações',
-                          () => Navigator.pushNamed(
-                            context,
-                            '/cotacao',
-                            arguments: {
-                              'titulo': 'Cotações',
-                              'moedaInicial': 'USD',
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    )
+                  else
+                    ..._viewModel.legacyTransfers.take(4).map((t) => _buildTransactionItem(t)),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
-            const SizedBox(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Últimas Transações',
-                  style: TextStyle(
-                    color: greenDark,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ExtratoCompletoPage(
-                          transferencias: _listaTransferencias,
-                          buildItemFunction: _buildTransactionItem,
-                        ),
-                      ),
-                    );
-                  },
-                  child: Text(
-                    'Ver Tudo',
-                    style: TextStyle(
-                      color: greyText,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (_listaTransferencias.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 30.0),
-                  child: Text(
-                    'Nenhuma transferência ainda.',
-                    style: TextStyle(color: greyText),
-                  ),
-                ),
-              )
-            else
-              ..._listaTransferencias.take(4).map((t) => _buildTransactionItem(t)),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

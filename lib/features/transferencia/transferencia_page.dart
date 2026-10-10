@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../database/db_helper.dart';
+import '../../presentation/viewmodels/transfer_viewmodel.dart';
 
+/// View puramente declarativa no padrão MVVM.
+///
+/// Não executa queries SQL, mutações de saldo nem gravações manuais.
+/// Toda a regra de validação, geração de idempotency key e execução atômica
+/// é orquestrada pelo [TransferViewModel].
 class TransferenciaPage extends StatefulWidget {
   const TransferenciaPage({super.key});
 
@@ -11,8 +16,7 @@ class TransferenciaPage extends StatefulWidget {
 }
 
 class _TransferenciaPageState extends State<TransferenciaPage> {
-  Map<String, dynamic>? _usuarioDados;
-  Map<String, dynamic>? _usuarioRecebedor;
+  late final TransferViewModel _viewModel;
 
   final _controladorChave = TextEditingController();
   final _controladorValor = TextEditingController();
@@ -25,11 +29,42 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
   final Color greyBackground = const Color(0xFFF8F9FA);
   final Color greyText = const Color(0xFF6C757D);
 
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = TransferViewModel();
+    _viewModel.addListener(_onViewModelStateChanged);
+  }
+
+  void _onViewModelStateChanged() {
+    if (!mounted) return;
+
+    if (_viewModel.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_viewModel.errorMessage!),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      _viewModel.clearError();
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _usuarioDados ??=
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (!_initialized) {
+      _initialized = true;
+      final dadosIniciais = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (dadosIniciais != null && dadosIniciais['nome_usuario'] != null) {
+        _viewModel.initSender(dadosIniciais['nome_usuario']);
+      }
+    }
   }
 
   @override
@@ -37,6 +72,8 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
     _controladorChave.dispose();
     _controladorValor.dispose();
     _controladorSenhaTransacao.dispose();
+    _viewModel.removeListener(_onViewModelStateChanged);
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -107,9 +144,13 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
     return '$inteira,$decimal';
   }
 
-  String _mascararCpf(String cpf) {
-    if (cpf.length < 14) return cpf;
-    return '***.${cpf.substring(4, 7)}.***-**';
+  String _mascararCpf(String? cpf) {
+    if (cpf == null || cpf.length < 11) return cpf ?? 'Não informado';
+    final digits = cpf.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 11) {
+      return '***.${digits.substring(3, 6)}.***-${digits.substring(9, 11)}';
+    }
+    return cpf;
   }
 
   double _lerValorTransferencia() {
@@ -120,107 +161,62 @@ class _TransferenciaPageState extends State<TransferenciaPage> {
     return double.tryParse(valorText) ?? 0.0;
   }
 
-  String _gerarDataFormatada(DateTime data) {
-    return '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}/${data.year} às ${data.hour.toString().padLeft(2, '0')}:${data.minute.toString().padLeft(2, '0')}';
-  }
-
   void _compartilharComprovante({
     required double valor,
     required String data,
     required String idTransacao,
   }) {
-    if (_usuarioDados == null || _usuarioRecebedor == null) return;
+    final sender = _viewModel.senderUser;
+    final receiver = _viewModel.receiverUser;
+
+    if (sender == null || receiver == null) return;
 
     final textoComprovante = '''
 Comprovante PIX - PayBank
 
-Transferência realizada com sucesso.
+Transferência realizada com sucesso via Core Banking Ledger.
 
 Valor: R\$ ${_formatarMoedaPtBr(valor)}
-Pagador: ${_usuarioDados!['nome']}
-Recebedor: ${_usuarioRecebedor!['nome']}
-CPF do recebedor: ${_mascararCpf(_usuarioRecebedor!['cpf'])}
+Pagador: ${sender.name}
+Recebedor: ${receiver.name}
+CPF do recebedor: ${_mascararCpf(receiver.cpf)}
 Instituição: PayBank
-Agência: ${_usuarioRecebedor!['agencia']}
-Conta: ${_usuarioRecebedor!['numero_conta']}
+Agência: ${receiver.agency}
+Conta: ${receiver.accountNumber}
 Data e hora: $data
 ID da transação: $idTransacao
+Idempotency Key: ${_viewModel.idempotencyKey ?? 'N/A'}
 ''';
 
     Share.share(textoComprovante);
   }
 
   Future<void> _validarERevisar() async {
-    if (_usuarioDados == null) return;
-
     final chave = _controladorChave.text.trim();
     final valorTransferencia = _lerValorTransferencia();
-    final saldoAtual = (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
 
-    if (chave.isEmpty || valorTransferencia <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, preencha a chave e um valor válido.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    if (valorTransferencia > saldoAtual) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Você não tem saldo suficiente para esse PIX!'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    final bancoDados = DatabaseHelper.instance;
-
-    final recebedor = await bancoDados.buscarUsuarioPorChavePix(
-      tipo: _tipoChaveSelecionada,
-      chave: chave,
+    final ok = await _viewModel.validateAndReview(
+      keyType: _tipoChaveSelecionada,
+      key: chave,
+      amountValue: valorTransferencia,
     );
 
-    if (!mounted) return;
-
-    if (recebedor == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chave PIX não encontrada ou inativa.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
+    if (ok && mounted) {
+      _mostrarRevisaoPix(valorTransferencia);
     }
-
-    if (recebedor['id'] == _usuarioDados!['id']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Você não pode fazer um PIX para você mesmo.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _usuarioRecebedor = recebedor;
-    });
-
-    _mostrarRevisaoPix(valorTransferencia);
   }
 
   void _mostrarRevisaoPix(double valorTransferencia) {
-    if (_usuarioDados == null || _usuarioRecebedor == null) return;
+    final sender = _viewModel.senderUser;
+    final receiver = _viewModel.receiverUser;
+
+    if (sender == null || receiver == null) return;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (bottomSheetCtx) {
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: const BoxDecoration(
@@ -256,15 +252,15 @@ ID da transação: $idTransacao
                   'Valor',
                   'R\$ ${_formatarMoedaPtBr(valorTransferencia)}',
                 ),
-                _linhaRevisao('De', _usuarioDados!['nome']),
-                _linhaRevisao('Para', _usuarioRecebedor!['nome']),
+                _linhaRevisao('De', sender.name),
+                _linhaRevisao('Para', receiver.name),
                 _linhaRevisao(
                   'CPF',
-                  _mascararCpf(_usuarioRecebedor!['cpf']),
+                  _mascararCpf(receiver.cpf),
                 ),
                 _linhaRevisao(
                   'Conta',
-                  'Ag. ${_usuarioRecebedor!['agencia']} | Conta ${_usuarioRecebedor!['numero_conta']}',
+                  'Ag. ${receiver.agency} | Conta ${receiver.accountNumber}',
                 ),
                 const SizedBox(height: 30),
                 SizedBox(
@@ -279,7 +275,7 @@ ID da transação: $idTransacao
                       elevation: 0,
                     ),
                     onPressed: () {
-                      Navigator.pop(context);
+                      Navigator.pop(bottomSheetCtx);
                       _mostrarSenhaTransacao(valorTransferencia);
                     },
                     child: const Text(
@@ -337,7 +333,7 @@ ID da transação: $idTransacao
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
+      builder: (dialogCtx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -357,29 +353,37 @@ ID da transação: $idTransacao
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: () {
-                final senhaDigitada = _controladorSenhaTransacao.text.trim();
-                final senhaCorreta =
-                    _usuarioDados?['senha_transacao']?.toString() ?? '';
+              style: ElevatedButton.styleFrom(
+                backgroundColor: greenPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () async {
+                final pin = _controladorSenhaTransacao.text.trim();
 
-                if (senhaDigitada.length != 6 || senhaDigitada != senhaCorreta) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Senha de transação incorreta.'),
-                      backgroundColor: Colors.redAccent,
-                    ),
-                  );
+                final pinOk = await _viewModel.verifyTransactionPin(pin);
+                if (!pinOk) {
                   return;
                 }
 
-                Navigator.pop(context);
-                _processarPix(valorTransferencia);
+                Navigator.pop(dialogCtx);
+                final sucesso = await _viewModel.executeTransfer();
+
+                if (sucesso && mounted && _viewModel.completedTransaction != null) {
+                  final tx = _viewModel.completedTransaction!;
+                  final dataFormatada = '${tx.createdAt.day.toString().padLeft(2, '0')}/${tx.createdAt.month.toString().padLeft(2, '0')}/${tx.createdAt.year} às ${tx.createdAt.hour.toString().padLeft(2, '0')}:${tx.createdAt.minute.toString().padLeft(2, '0')}';
+
+                  _mostrarComprovantePix(
+                    valor: valorTransferencia,
+                    data: dataFormatada,
+                    idTransacao: tx.id,
+                  );
+                }
               },
-              child: const Text('Confirmar'),
+              child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -387,90 +391,15 @@ ID da transação: $idTransacao
     );
   }
 
-  Future<void> _processarPix(double valorTransferencia) async {
-    if (_usuarioDados == null || _usuarioRecebedor == null) return;
-
-    try {
-      final bancoDados = DatabaseHelper.instance;
-      final banco = await bancoDados.database;
-
-      final saldoRemetente =
-          (_usuarioDados!['saldo'] as num?)?.toDouble() ?? 0.0;
-      final saldoRecebedor =
-          (_usuarioRecebedor!['saldo'] as num?)?.toDouble() ?? 0.0;
-
-      final novoSaldoRemetente = saldoRemetente - valorTransferencia;
-      final novoSaldoRecebedor = saldoRecebedor + valorTransferencia;
-
-      await banco.update(
-        'usuarios',
-        {'saldo': novoSaldoRemetente},
-        where: 'id = ?',
-        whereArgs: [_usuarioDados!['id']],
-      );
-
-      await banco.update(
-        'usuarios',
-        {'saldo': novoSaldoRecebedor},
-        where: 'id = ?',
-        whereArgs: [_usuarioRecebedor!['id']],
-      );
-
-      final agora = DateTime.now();
-      final dataFormatada = _gerarDataFormatada(agora);
-      final idTransacao = 'E${agora.millisecondsSinceEpoch}';
-
-      await bancoDados.gravarTransferencia({
-        'id_usuario': _usuarioDados!['id'],
-        'tipo': 'SAIDA',
-        'recebedor': _usuarioRecebedor!['nome'],
-        'pagador': _usuarioDados!['nome'],
-        'cpf_recebedor': _usuarioRecebedor!['cpf'],
-        'agencia_recebedor': _usuarioRecebedor!['agencia'],
-        'conta_recebedor': _usuarioRecebedor!['numero_conta'],
-        'valor': valorTransferencia,
-        'data': dataFormatada,
-        'id_transacao': idTransacao,
-      });
-
-      await bancoDados.gravarTransferencia({
-        'id_usuario': _usuarioRecebedor!['id'],
-        'tipo': 'ENTRADA',
-        'recebedor': _usuarioDados!['nome'],
-        'pagador': _usuarioDados!['nome'],
-        'cpf_recebedor': _usuarioRecebedor!['cpf'],
-        'agencia_recebedor': _usuarioRecebedor!['agencia'],
-        'conta_recebedor': _usuarioRecebedor!['numero_conta'],
-        'valor': valorTransferencia,
-        'data': dataFormatada,
-        'id_transacao': idTransacao,
-      });
-
-      if (!mounted) return;
-
-      _mostrarComprovantePix(
-        valor: valorTransferencia,
-        data: dataFormatada,
-        idTransacao: idTransacao,
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erro ao processar PIX: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    }
-  }
-
   void _mostrarComprovantePix({
     required double valor,
     required String data,
     required String idTransacao,
   }) {
-    if (_usuarioDados == null || _usuarioRecebedor == null) return;
+    final sender = _viewModel.senderUser;
+    final receiver = _viewModel.receiverUser;
+
+    if (sender == null || receiver == null) return;
 
     showDialog(
       context: context,
@@ -523,18 +452,15 @@ ID da transação: $idTransacao
                   ),
                   child: Column(
                     children: [
-                      _linhaComprovante('Pagador', _usuarioDados!['nome']),
+                      _linhaComprovante('Pagador', sender.name),
                       const Divider(height: 20),
-                      _linhaComprovante('Recebedor', _usuarioRecebedor!['nome']),
+                      _linhaComprovante('Recebedor', receiver.name),
                       const Divider(height: 20),
-                      _linhaComprovante(
-                        'CPF',
-                        _mascararCpf(_usuarioRecebedor!['cpf']),
-                      ),
+                      _linhaComprovante('CPF', _mascararCpf(receiver.cpf)),
                       const Divider(height: 20),
                       _linhaComprovante(
                         'Conta',
-                        'Ag. ${_usuarioRecebedor!['agencia']} | ${_usuarioRecebedor!['numero_conta']}',
+                        'Ag. ${receiver.agency} | ${receiver.accountNumber}',
                       ),
                       const Divider(height: 20),
                       _linhaComprovante('Data', data),
@@ -616,280 +542,285 @@ ID da transação: $idTransacao
 
   @override
   Widget build(BuildContext context) {
-    final saldoAtual =
-        _usuarioDados != null ? (_usuarioDados!['saldo'] as num).toDouble() : 0.0;
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) {
+        final saldoDisponivel = _viewModel.senderAccount?.balance.toDouble() ?? 0.0;
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Área PIX',
-          style: TextStyle(
-            color: greenDark,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: greenDark),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: greenPrimary,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: greenPrimary.withValues(alpha: 0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  )
-                ],
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(
+              'Área PIX',
+              style: TextStyle(
+                color: greenDark,
+                fontWeight: FontWeight.bold,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: greenDark),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: greenPrimary,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: greenPrimary.withValues(alpha: 0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      )
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Saldo disponível para envio',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Saldo disponível para envio',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'R\$ ${_formatarMoedaPtBr(saldoDisponivel)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'R\$ ${_formatarMoedaPtBr(saldoAtual)}',
-                        style: const TextStyle(
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.account_balance_wallet,
                           color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
+                ),
+                const SizedBox(height: 35),
+                Text(
+                  '1. Qual é o tipo de chave?',
+                  style: TextStyle(
+                    color: greenDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 15),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['CPF', 'Celular', 'E-mail', 'Aleatória'].map((tipo) {
+                      bool ativo = _tipoChaveSelecionada == tipo;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10.0),
+                        child: ChoiceChip(
+                          label: Text(
+                            tipo,
+                            style: TextStyle(
+                              color: ativo ? Colors.white : greenDark,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          selected: ativo,
+                          selectedColor: greenPrimary,
+                          backgroundColor: greyBackground,
+                          elevation: 0,
+                          pressElevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: ativo ? greenPrimary : Colors.grey[300]!,
+                            ),
+                          ),
+                          onSelected: (val) {
+                            setState(() {
+                              _tipoChaveSelecionada = tipo;
+                              _controladorChave.clear();
+                            });
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 35),
+                Text(
+                  '2. Insira os dados',
+                  style: TextStyle(
+                    color: greenDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: _controladorChave,
+                  keyboardType: _obterTecladoPorTipo(),
+                  inputFormatters: [_obterMascaraPorTipo()],
+                  style: TextStyle(
+                    color: greenDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Chave $_tipoChaveSelecionada',
+                    labelStyle: TextStyle(color: greyText),
+                    hintText: _tipoChaveSelecionada == 'CPF'
+                        ? '000.000.000-00'
+                        : (_tipoChaveSelecionada == 'Celular'
+                            ? '(00) 00000-0000'
+                            : 'Digite aqui...'),
+                    prefixIcon: Icon(
+                      Icons.vpn_key_rounded,
+                      color: greenPrimary,
                     ),
-                    child: const Icon(
-                      Icons.account_balance_wallet,
-                      color: Colors.white,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.grey[300]!,
+                        width: 1.5,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.grey[300]!,
+                        width: 1.5,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: greenPrimary,
+                        width: 2.0,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 35),
-            Text(
-              '1. Qual é o tipo de chave?',
-              style: TextStyle(
-                color: greenDark,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 15),
-
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ['CPF', 'Celular', 'E-mail', 'Aleatória'].map((tipo) {
-                  bool ativo = _tipoChaveSelecionada == tipo;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10.0),
-                    child: ChoiceChip(
-                      label: Text(
-                        tipo,
-                        style: TextStyle(
-                          color: ativo ? Colors.white : greenDark,
-                          fontWeight: FontWeight.bold,
-                        ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _controladorValor,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [CentavosInputFormatter()],
+                  style: TextStyle(
+                    color: greenPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Valor da Transferência',
+                    labelStyle: TextStyle(color: greyText, fontSize: 14),
+                    prefixText: 'R\$ ',
+                    prefixStyle: TextStyle(
+                      color: greenPrimary,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.attach_money_rounded,
+                      color: greenPrimary,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.grey[300]!,
+                        width: 1.5,
                       ),
-                      selected: ativo,
-                      selectedColor: greenPrimary,
-                      backgroundColor: greyBackground,
-                      elevation: 0,
-                      pressElevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: Colors.grey[300]!,
+                        width: 1.5,
                       ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                        color: greenPrimary,
+                        width: 2.0,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 50),
+                SizedBox(
+                  width: double.infinity,
+                  height: 60,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: greenPrimary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: ativo ? greenPrimary : Colors.grey[300]!,
-                        ),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      onSelected: (val) {
-                        setState(() {
-                          _tipoChaveSelecionada = tipo;
-                          _controladorChave.clear();
-                        });
-                      },
+                      elevation: 0,
                     ),
-                  );
-                }).toList(),
-              ),
+                    onPressed: _viewModel.isLoading ? null : _validarERevisar,
+                    child: _viewModel.isLoading
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Enviar PIX',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Icon(Icons.send_rounded, color: Colors.white),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
             ),
-
-            const SizedBox(height: 35),
-            Text(
-              '2. Insira os dados',
-              style: TextStyle(
-                color: greenDark,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 15),
-
-            TextField(
-              controller: _controladorChave,
-              keyboardType: _obterTecladoPorTipo(),
-              inputFormatters: [_obterMascaraPorTipo()],
-              style: TextStyle(
-                color: greenDark,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Chave $_tipoChaveSelecionada',
-                labelStyle: TextStyle(color: greyText),
-                hintText: _tipoChaveSelecionada == 'CPF'
-                    ? '000.000.000-00'
-                    : (_tipoChaveSelecionada == 'Celular'
-                        ? '(00) 00000-0000'
-                        : 'Digite aqui...'),
-                prefixIcon: Icon(
-                  Icons.vpn_key_rounded,
-                  color: greenPrimary,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: Colors.grey[300]!,
-                    width: 1.5,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: Colors.grey[300]!,
-                    width: 1.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: greenPrimary,
-                    width: 2.0,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            TextField(
-              controller: _controladorValor,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [CentavosInputFormatter()],
-              style: TextStyle(
-                color: greenPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-              decoration: InputDecoration(
-                labelText: 'Valor da Transferência',
-                labelStyle: TextStyle(color: greyText, fontSize: 14),
-                prefixText: 'R\$ ',
-                prefixStyle: TextStyle(
-                  color: greenPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-                prefixIcon: Icon(
-                  Icons.attach_money_rounded,
-                  color: greenPrimary,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: Colors.grey[300]!,
-                    width: 1.5,
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: Colors.grey[300]!,
-                    width: 1.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: greenPrimary,
-                    width: 2.0,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 50),
-
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: greenPrimary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: _validarERevisar,
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Enviar PIX',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(width: 10),
-                    Icon(Icons.send_rounded, color: Colors.white),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

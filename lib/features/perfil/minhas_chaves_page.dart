@@ -1,8 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../database/db_helper.dart';
+import '../../presentation/viewmodels/profile_viewmodel.dart';
 
+/// View puramente declarativa no padrão MVVM.
+///
+/// Não acessa SQLite nem SharedPreferences. Delega a gestão de chaves PIX
+/// e a validação de segurança transacional para o [ProfileViewModel].
 class MinhasChavesPage extends StatefulWidget {
   const MinhasChavesPage({super.key});
 
@@ -16,121 +20,102 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
   final Color greyBackground = const Color(0xFFF8F9FA);
   final Color greyText = const Color(0xFF6C757D);
 
-  Map<String, dynamic>? _usuarioDados;
-  final List<Map<String, dynamic>> _chaves = [];
-  bool _carregando = true;
+  late final ProfileViewModel _viewModel;
   bool _inicializado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = ProfileViewModel();
+    _viewModel.addListener(_onViewModelStateChanged);
+  }
+
+  void _onViewModelStateChanged() {
+    if (!mounted) return;
+
+    if (_viewModel.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_viewModel.errorMessage!),
+          backgroundColor: Colors.redAccent.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _viewModel.clearError();
+    } else if (_viewModel.successMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_viewModel.successMessage!),
+          backgroundColor: greenPrimary,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _viewModel.clearSuccess();
+    }
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
     if (!_inicializado) {
-      final dadosIniciais =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-      if (dadosIniciais != null) {
-        _carregarUsuario(dadosIniciais['nome_usuario']);
+      final dadosIniciais = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (dadosIniciais != null && dadosIniciais['nome_usuario'] != null) {
+        _viewModel.loadUser(dadosIniciais['nome_usuario']);
       }
-
       _inicializado = true;
     }
   }
 
-  Future<void> _carregarUsuario(String nomeUsuario) async {
-    final bancoDados = DatabaseHelper.instance;
-    final usuarioAtualizado =
-        await bancoDados.buscarUsuarioPorLogin(nomeUsuario);
-
-    if (!mounted) return;
-
-    if (usuarioAtualizado != null) {
-      setState(() {
-        _usuarioDados = usuarioAtualizado;
-        _montarListaChaves();
-        _carregando = false;
-      });
-    }
+  @override
+  void dispose() {
+    _viewModel.removeListener(_onViewModelStateChanged);
+    _viewModel.dispose();
+    super.dispose();
   }
 
-  void _montarListaChaves() {
-    _chaves.clear();
+  List<Map<String, dynamic>> _obterChavesAtivas() {
+    final user = _viewModel.currentUser;
+    if (user == null) return [];
 
-    if (_usuarioDados == null) return;
+    final List<Map<String, dynamic>> chaves = [];
 
-    if ((_usuarioDados!['chave_cpf_ativa'] ?? 1) == 1) {
-      _chaves.add({
+    if (user.isCpfKeyActive) {
+      chaves.add({
         'tipo': 'CPF',
-        'valor': _usuarioDados!['cpf'],
+        'valor': user.cpf,
         'icone': Icons.badge,
         'fixa': true,
       });
     }
 
-    if ((_usuarioDados!['chave_telefone_ativa'] ?? 0) == 1) {
-      _chaves.add({
+    if (user.isPhoneKeyActive) {
+      chaves.add({
         'tipo': 'Celular',
-        'valor': _usuarioDados!['telefone'],
+        'valor': user.phone,
         'icone': Icons.phone_android,
         'fixa': false,
       });
     }
 
-    if ((_usuarioDados!['chave_email_ativa'] ?? 0) == 1) {
-      _chaves.add({
+    if (user.isEmailKeyActive) {
+      chaves.add({
         'tipo': 'E-mail',
-        'valor': _usuarioDados!['email'],
+        'valor': user.email,
         'icone': Icons.email,
         'fixa': false,
       });
     }
 
-    final chaveAleatoria = _usuarioDados!['chave_aleatoria'];
-
-    if (chaveAleatoria != null && chaveAleatoria.toString().isNotEmpty) {
-      _chaves.add({
+    if (user.randomPixKey != null && user.randomPixKey!.isNotEmpty) {
+      chaves.add({
         'tipo': 'Aleatória',
-        'valor': chaveAleatoria,
+        'valor': user.randomPixKey!,
         'icone': Icons.vpn_key,
         'fixa': false,
       });
     }
-  }
 
-  Future<void> _excluirChave(Map<String, dynamic> chave) async {
-    if (_usuarioDados == null) return;
-
-    final tipo = chave['tipo'];
-
-    if (tipo == 'CPF') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('A chave CPF é padrão da conta e não pode ser removida.'),
-        ),
-      );
-      return;
-    }
-
-    final bancoDados = DatabaseHelper.instance;
-
-    final Map<String, dynamic> atualizacao = {};
-
-    if (tipo == 'Celular') {
-      atualizacao['chave_telefone_ativa'] = 0;
-    } else if (tipo == 'E-mail') {
-      atualizacao['chave_email_ativa'] = 0;
-    } else if (tipo == 'Aleatória') {
-      atualizacao['chave_aleatoria'] = null;
-    }
-
-    await bancoDados.atualizarUsuario(_usuarioDados!['id'], atualizacao);
-    await _carregarUsuario(_usuarioDados!['nome_usuario']);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Chave $tipo removida.')),
-    );
+    return chaves;
   }
 
   String _gerarChaveAleatoria() {
@@ -141,131 +126,114 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
       if (index == 8 || index == 12 || index == 16 || index == 20) {
         return '-';
       }
-
       return chars[r.nextInt(chars.length)];
     }).join('');
   }
 
-  TextInputFormatter _obterMascara(String tipo) {
-    if (tipo == 'CPF') {
-      return TextInputFormatter.withFunction((oldValue, newValue) {
-        final text = newValue.text.replaceAll(RegExp(r'\D'), '');
-
-        if (text.length > 11) return oldValue;
-
-        String formatted = '';
-
-        for (int i = 0; i < text.length; i++) {
-          if (i == 3 || i == 6) formatted += '.';
-          if (i == 9) formatted += '-';
-          formatted += text[i];
-        }
-
-        return TextEditingValue(
-          text: formatted,
-          selection: TextSelection.collapsed(offset: formatted.length),
-        );
-      });
-    } else if (tipo == 'Celular') {
-      return TextInputFormatter.withFunction((oldValue, newValue) {
-        final text = newValue.text.replaceAll(RegExp(r'\D'), '');
-
-        if (text.length > 11) return oldValue;
-
-        String formatted = '';
-
-        for (int i = 0; i < text.length; i++) {
-          if (i == 0) formatted += '(';
-          if (i == 2) formatted += ') ';
-          if (i == 7) formatted += '-';
-          formatted += text[i];
-        }
-
-        return TextEditingValue(
-          text: formatted,
-          selection: TextSelection.collapsed(offset: formatted.length),
-        );
-      });
-    }
-
-    return TextInputFormatter.withFunction((oldValue, newValue) => newValue);
-  }
-
-  TextInputType _obterTeclado(String tipo) {
-    if (tipo == 'CPF' || tipo == 'Celular') return TextInputType.number;
-    if (tipo == 'E-mail') return TextInputType.emailAddress;
-    return TextInputType.text;
-  }
-
-  IconData _obterIcone(String tipo) {
-    if (tipo == 'CPF') return Icons.badge;
-    if (tipo == 'Celular') return Icons.phone_android;
-    if (tipo == 'E-mail') return Icons.email;
-    return Icons.vpn_key;
-  }
-
   bool _chaveJaAtiva(String tipo) {
-    if (_usuarioDados == null) return false;
+    final user = _viewModel.currentUser;
+    if (user == null) return false;
 
-    if (tipo == 'CPF') return true;
-    if (tipo == 'Celular') return (_usuarioDados!['chave_telefone_ativa'] ?? 0) == 1;
-    if (tipo == 'E-mail') return (_usuarioDados!['chave_email_ativa'] ?? 0) == 1;
+    if (tipo == 'CPF') return user.isCpfKeyActive;
+    if (tipo == 'Celular') return user.isPhoneKeyActive;
+    if (tipo == 'E-mail') return user.isEmailKeyActive;
 
-    final chaveAleatoria = _usuarioDados!['chave_aleatoria'];
-    return chaveAleatoria != null && chaveAleatoria.toString().isNotEmpty;
+    return user.randomPixKey != null && user.randomPixKey!.isNotEmpty;
   }
 
-  Future<void> _cadastrarChave(String tipo, String valor) async {
-    if (_usuarioDados == null) return;
+  void _solicitarPinSeguranca({required VoidCallback onAuthorized}) {
+    final pinController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Confirmação de Segurança', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Digite seu PIN de 6 dígitos para autorizar a alteração de chave PIX:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                obscureText: true,
+                maxLength: 6,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(
+                  labelText: 'PIN de Transação',
+                  border: OutlineInputBorder(),
+                  counterText: '',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: greenPrimary),
+              onPressed: () async {
+                final pin = pinController.text.trim();
+                final valido = await _viewModel.verifyTransactionPin(pin);
+
+                if (!valido) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('PIN incorreto. Ação cancelada.')),
+                    );
+                  }
+                  return;
+                }
+
+                Navigator.pop(dialogCtx);
+                onAuthorized();
+              },
+              child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _excluirChave(Map<String, dynamic> chave) {
+    final tipo = chave['tipo'];
 
     if (tipo == 'CPF') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('A chave CPF já é cadastrada automaticamente.'),
-        ),
+        const SnackBar(content: Text('A chave CPF é padrão da conta e não pode ser removida.')),
       );
       return;
     }
 
-    if (_chaveJaAtiva(tipo)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('A chave $tipo já está cadastrada.')),
-      );
-      return;
-    }
-
-    final bancoDados = DatabaseHelper.instance;
-    final Map<String, dynamic> atualizacao = {};
-
-    if (tipo == 'Celular') {
-      atualizacao['chave_telefone_ativa'] = 1;
-    } else if (tipo == 'E-mail') {
-      atualizacao['chave_email_ativa'] = 1;
-    } else if (tipo == 'Aleatória') {
-      atualizacao['chave_aleatoria'] = valor;
-    }
-
-    await bancoDados.atualizarUsuario(_usuarioDados!['id'], atualizacao);
-    await _carregarUsuario(_usuarioDados!['nome_usuario']);
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Chave $tipo cadastrada.')),
+    _solicitarPinSeguranca(
+      onAuthorized: () async {
+        final user = _viewModel.currentUser!;
+        await _viewModel.updatePixKeys(
+          isCpfActive: user.isCpfKeyActive,
+          isEmailActive: tipo == 'E-mail' ? false : user.isEmailKeyActive,
+          isPhoneActive: tipo == 'Celular' ? false : user.isPhoneKeyActive,
+          randomKey: tipo == 'Aleatória' ? '' : user.randomPixKey,
+        );
+      },
     );
   }
 
   void _mostrarModalCadastro() {
     String tipoSelecionado = 'Celular';
     final TextEditingController controlador = TextEditingController();
-
     final tiposPermitidos = ['Celular', 'E-mail', 'Aleatória'];
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (bottomSheetCtx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             if (tipoSelecionado == 'Aleatória' && controlador.text.isEmpty) {
@@ -273,9 +241,7 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
             }
 
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: const BoxDecoration(
@@ -302,19 +268,15 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
                     const SizedBox(height: 25),
                     Text(
                       'Cadastrar Nova Chave',
-                      style: TextStyle(
-                        color: greenDark,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(color: greenDark, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 20),
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
                       children: tiposPermitidos.map((tipo) {
-                        bool ativo = tipoSelecionado == tipo;
-                        bool jaAtiva = _chaveJaAtiva(tipo);
+                        final ativo = tipoSelecionado == tipo;
+                        final jaAtiva = _chaveJaAtiva(tipo);
 
                         return ChoiceChip(
                           label: Text(
@@ -329,107 +291,43 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
                           backgroundColor: greyBackground,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                              color: ativo ? greenPrimary : Colors.grey[300]!,
-                            ),
+                            side: BorderSide(color: ativo ? greenPrimary : Colors.grey[300]!),
                           ),
                           onSelected: jaAtiva
                               ? null
                               : (val) {
                                   setModalState(() {
                                     tipoSelecionado = tipo;
-                                    controlador.text = tipo == 'Aleatória'
-                                        ? _gerarChaveAleatoria()
-                                        : '';
+                                    controlador.text = tipo == 'Aleatória' ? _gerarChaveAleatoria() : '';
                                   });
                                 },
                         );
                       }).toList(),
                     ),
                     const SizedBox(height: 25),
-                    TextField(
-                      controller: controlador,
-                      keyboardType: _obterTeclado(tipoSelecionado),
-                      inputFormatters: [_obterMascara(tipoSelecionado)],
-                      readOnly: tipoSelecionado == 'Aleatória',
-                      style: TextStyle(
-                        color: greenDark,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Chave $tipoSelecionado',
-                        labelStyle: TextStyle(color: greyText),
-                        prefixIcon: Icon(
-                          _obterIcone(tipoSelecionado),
-                          color: greenPrimary,
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(
-                            color: Colors.grey[300]!,
-                            width: 1.5,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(
-                            color: Colors.grey[300]!,
-                            width: 1.5,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(
-                            color: greenPrimary,
-                            width: 2.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
                     SizedBox(
                       width: double.infinity,
-                      height: 60,
+                      height: 52,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: greenPrimary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: () async {
-                          final valor = tipoSelecionado == 'Aleatória'
-                              ? controlador.text.trim()
-                              : (_usuarioDados?[tipoSelecionado == 'Celular'
-                                      ? 'telefone'
-                                      : 'email']
-                                  ?.toString() ??
-                                  controlador.text.trim());
-
-                          if (valor.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Informe uma chave válida.'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          Navigator.pop(context);
-                          await _cadastrarChave(tipoSelecionado, valor);
+                        onPressed: () {
+                          Navigator.pop(bottomSheetCtx);
+                          _solicitarPinSeguranca(
+                            onAuthorized: () async {
+                              final user = _viewModel.currentUser!;
+                              await _viewModel.updatePixKeys(
+                                isCpfActive: user.isCpfKeyActive,
+                                isEmailActive: tipoSelecionado == 'E-mail' ? true : user.isEmailKeyActive,
+                                isPhoneActive: tipoSelecionado == 'Celular' ? true : user.isPhoneKeyActive,
+                                randomKey: tipoSelecionado == 'Aleatória' ? controlador.text : user.randomPixKey,
+                              );
+                            },
+                          );
                         },
-                        child: const Text(
-                          'Confirmar Cadastro',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: const Text('Confirmar Cadastro', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -444,116 +342,109 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_carregando || _usuarioDados == null) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: CircularProgressIndicator(color: greenPrimary),
-        ),
-      );
-    }
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) {
+        final chavesAtivas = _obterChavesAtivas();
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Minhas Chaves PIX',
-          style: TextStyle(
-            color: greenDark,
-            fontWeight: FontWeight.bold,
+        return Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(
+              'Minhas Chaves PIX',
+              style: TextStyle(color: greenDark, fontWeight: FontWeight.bold),
+            ),
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: greenDark),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: greenDark),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Chaves Cadastradas',
-              style: TextStyle(
-                color: greenDark,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (_chaves.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text(
-                  'Nenhuma chave cadastrada.',
-                  style: TextStyle(color: greyText),
-                ),
-              ),
-            ..._chaves.map((chave) {
-              return _buildKeyCard(
-                chave['icone'],
-                chave['tipo'],
-                chave['valor'],
-                chave,
-              );
-            }),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: greenPrimary, width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+          body: _viewModel.isLoading && _viewModel.currentUser == null
+              ? Center(child: CircularProgressIndicator(color: greenPrimary))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: greenPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.shield_outlined, color: greenPrimary, size: 30),
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Diretório de Chaves do PayBank',
+                                    style: TextStyle(color: greenDark, fontWeight: FontWeight.bold, fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Suas chaves vinculam pagamentos instantâneos com liquidação no Ledger.',
+                                    style: TextStyle(color: greyText, fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      Text(
+                        'Chaves Cadastradas',
+                        style: TextStyle(color: greenDark, fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 15),
+                      ...chavesAtivas.map((chave) => _buildChaveItem(chave)),
+                      const SizedBox(height: 25),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: OutlinedButton.icon(
+                          onPressed: _mostrarModalCadastro,
+                          icon: Icon(Icons.add, color: greenPrimary),
+                          label: Text(
+                            'Cadastrar Nova Chave',
+                            style: TextStyle(color: greenPrimary, fontWeight: FontWeight.bold),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: greenPrimary, width: 1.5),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                icon: Icon(Icons.add, color: greenPrimary),
-                label: Text(
-                  'Cadastrar Nova Chave',
-                  style: TextStyle(
-                    color: greenPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                onPressed: _mostrarModalCadastro,
-              ),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildKeyCard(
-    IconData icon,
-    String type,
-    String value,
-    Map<String, dynamic> chave,
-  ) {
-    final fixa = chave['fixa'] == true;
+  Widget _buildChaveItem(Map<String, dynamic> chave) {
+    final fixa = chave['fixa'] as bool;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: greyBackground,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: greyBackground, width: 2),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: greenPrimary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: greenPrimary),
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: Icon(chave['icone'] as IconData, color: greenPrimary),
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -561,35 +452,31 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  fixa ? '$type padrão' : type,
-                  style: TextStyle(
-                    color: greyText,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  chave['tipo'] as String,
+                  style: TextStyle(color: greenDark, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 4),
                 Text(
-                  value,
-                  style: TextStyle(
-                    color: greenDark,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  chave['valor'] as String,
+                  style: TextStyle(color: greyText, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           if (!fixa)
             IconButton(
-              icon: const Icon(
-                Icons.delete_outline,
-                color: Colors.redAccent,
-              ),
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
               onPressed: () => _excluirChave(chave),
             )
           else
-            Icon(Icons.lock_outline, color: greyText),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text('Padrão', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            ),
         ],
       ),
     );

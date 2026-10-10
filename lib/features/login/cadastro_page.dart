@@ -1,13 +1,15 @@
-import 'dart:io';
-import 'dart:convert';
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:pay_bank/widgets/bouncing_button.dart';
-import 'dart:ui';
-import 'dart:math' as math;
-import '../../database/db_helper.dart';
+import '../../presentation/viewmodels/auth_viewmodel.dart';
 
+/// View puramente declarativa no padrão MVVM.
+///
+/// Não contém requisições HTTP diretas, regras de formatação de tabelas SQLite ou HttpClient.
+/// Todas as consultas e regras são orquestradas pelo [AuthViewModel].
 class CadastroPage extends StatefulWidget {
   const CadastroPage({super.key});
 
@@ -19,8 +21,9 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
   late final AnimationController _controller1;
   late final AnimationController _controller2;
 
+  late final AuthViewModel _viewModel;
+
   int _etapaAtual = 0;
-  bool _buscandoCep = false;
 
   final _nomeController = TextEditingController();
   final _userController = TextEditingController();
@@ -28,7 +31,7 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
   final _dataNascimentoController = TextEditingController();
   final _telefoneController = TextEditingController();
   final _emailController = TextEditingController();
-  
+
   final _cepController = TextEditingController();
   final _ruaController = TextEditingController();
   final _bairroController = TextEditingController();
@@ -42,14 +45,15 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
   bool _ocultarSenhaAcesso = true;
   bool _ocultarSenhaTransacao = true;
 
-  var cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
-  var foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
-  var dataMask = MaskTextInputFormatter(mask: '##/##/####', filter: {"#": RegExp(r'[0-9]')});
-  var cepMask = MaskTextInputFormatter(mask: '#####-###', filter: {"#": RegExp(r'[0-9]')});
+  final cpfMask = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
+  final foneMask = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
+  final dataMask = MaskTextInputFormatter(mask: '##/##/####', filter: {"#": RegExp(r'[0-9]')});
+  final cepMask = MaskTextInputFormatter(mask: '#####-###', filter: {"#": RegExp(r'[0-9]')});
 
   @override
   void initState() {
     super.initState();
+
     _controller1 = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -59,6 +63,21 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
       vsync: this,
       duration: const Duration(seconds: 10),
     )..repeat();
+
+    _viewModel = AuthViewModel();
+    _viewModel.addListener(_onViewModelStateChanged);
+  }
+
+  void _onViewModelStateChanged() {
+    if (!mounted) return;
+
+    if (_viewModel.errorMessage != null) {
+      _mostrarMensagem(_viewModel.errorMessage!, isError: true);
+      _viewModel.clearError();
+    } else if (_viewModel.successMessage != null) {
+      _mostrarMensagem(_viewModel.successMessage!, isError: false);
+      _viewModel.clearSuccess();
+    }
   }
 
   @override
@@ -79,58 +98,43 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
     _numeroController.dispose();
     _senhaAcessoController.dispose();
     _senhaTransacaoController.dispose();
+    _viewModel.removeListener(_onViewModelStateChanged);
+    _viewModel.dispose();
     super.dispose();
   }
 
+  void _mostrarMensagem(String texto, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(texto),
+        backgroundColor: isError ? Colors.redAccent.shade700 : const Color(0xFF3FA168),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   Future<void> _buscarCEP() async {
-    final cepDigitado = _cepController.text.replaceAll(RegExp(r'[^0-9]'), '');
-    
-    if (cepDigitado.length != 8) {
-      _mostrarMensagem('Digite um CEP válido com 8 números.');
-      return;
-    }
+    final cepDigitado = _cepController.text.trim();
 
-    setState(() {
-      _buscandoCep = true;
-    });
+    final sucesso = await _viewModel.searchCep(cepDigitado);
 
-    try {
-      final url = Uri.parse('https://viacep.com.br/ws/$cepDigitado/json/');
-      final cliente = HttpClient();
-      final requisicao = await cliente.getUrl(url);
-      final resposta = await requisicao.close();
-
-      if (resposta.statusCode == 200) {
-        final corpoResposta = await resposta.transform(utf8.decoder).join();
-        final dadosCep = jsonDecode(corpoResposta);
-
-        if (dadosCep['erro'] == true) {
-          _mostrarMensagem('CEP não encontrado.');
-        } else {
-          setState(() {
-            _ruaController.text = dadosCep['logradouro'] ?? '';
-            _bairroController.text = dadosCep['bairro'] ?? '';
-            _cidadeController.text = dadosCep['localidade'] ?? '';
-            _estadoController.text = dadosCep['uf'] ?? '';
-          });
-        }
-      } else {
-        _mostrarMensagem('Erro ao buscar o CEP.');
-      }
-    } catch (e) {
-      _mostrarMensagem('Erro de conexão ao buscar o CEP.');
-    } finally {
+    if (sucesso && mounted && _viewModel.searchedAddress != null) {
+      final endereco = _viewModel.searchedAddress!;
       setState(() {
-        _buscandoCep = false;
+        _ruaController.text = endereco.street;
+        _bairroController.text = endereco.neighborhood;
+        _cidadeController.text = endereco.city;
+        _estadoController.text = endereco.state;
       });
     }
   }
 
   void _avancarEtapa() {
     if (_etapaAtual == 0) {
-      if (_nomeController.text.trim().isEmpty || 
-          _userController.text.trim().isEmpty || 
-          _cpfController.text.length < 14 || 
+      if (_nomeController.text.trim().isEmpty ||
+          _userController.text.trim().isEmpty ||
+          _cpfController.text.length < 14 ||
           _dataNascimentoController.text.length < 10) {
         _mostrarMensagem('Preencha todos os dados pessoais corretamente.');
         return;
@@ -141,7 +145,9 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
         return;
       }
     } else if (_etapaAtual == 2) {
-      if (_cepController.text.length < 9 || _ruaController.text.trim().isEmpty || _cidadeController.text.trim().isEmpty) {
+      if (_cepController.text.length < 9 ||
+          _ruaController.text.trim().isEmpty ||
+          _cidadeController.text.trim().isEmpty) {
         _mostrarMensagem('Preencha os dados de endereço. Busque pelo CEP.');
         return;
       }
@@ -168,52 +174,26 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
       return;
     }
 
-    try {
-      String enderecoMontado = _ruaController.text.trim();
-      if (_numeroController.text.trim().isNotEmpty) {
-        enderecoMontado += ', Nº ${_numeroController.text.trim()}';
-      }
-      if (_bairroController.text.trim().isNotEmpty) {
-        enderecoMontado += ' - ${_bairroController.text.trim()}';
-      }
-      if (_cidadeController.text.trim().isNotEmpty) {
-        enderecoMontado += ', ${_cidadeController.text.trim()}/${_estadoController.text.trim()}';
-      }
+    final sucesso = await _viewModel.registerUser(
+      name: _nomeController.text,
+      username: _userController.text,
+      email: _emailController.text,
+      phone: _telefoneController.text,
+      cpf: _cpfController.text,
+      birthDate: _dataNascimentoController.text,
+      cep: _cepController.text,
+      street: _ruaController.text,
+      number: _numeroController.text,
+      neighborhood: _bairroController.text,
+      city: _cidadeController.text,
+      state: _estadoController.text,
+      password: _senhaAcessoController.text,
+      transactionPassword: _senhaTransacaoController.text,
+    );
 
-      final geradorAleatorio = math.Random();
-      final numeroContaGerado = '${geradorAleatorio.nextInt(90000) + 10000}-${geradorAleatorio.nextInt(9)}';
-
-      final db = DatabaseHelper.instance;
-      
-      Map<String, dynamic> novoUsuario = {
-        'nome': _nomeController.text.trim(),
-        'nome_usuario': _userController.text.trim(),
-        'senha': _senhaAcessoController.text.trim(),
-        'senha_transacao': _senhaTransacaoController.text.trim(),
-        'email': _emailController.text.trim(),
-        'telefone': _telefoneController.text.trim(),
-        'cpf': _cpfController.text.trim(),
-        'data_nascimento': _dataNascimentoController.text.trim(),
-        'endereco': enderecoMontado,
-        'cep': _cepController.text.trim(),
-        'agencia': '0001',
-        'numero_conta': numeroContaGerado,
-        'saldo': 0.0,
-      };
-
-      await db.gravarUsuario(novoUsuario);
-
-      if (!mounted) return;
-
-      _mostrarMensagem('Conta criada com sucesso! Faça seu Login.');
+    if (sucesso && mounted) {
       Navigator.pushReplacementNamed(context, '/login');
-    } catch (e) {
-      _mostrarMensagem('Usuário ou CPF já cadastrado no sistema.');
     }
-  }
-
-  void _mostrarMensagem(String texto) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }
 
   List<Widget> _renderizarEtapaAtual() {
@@ -224,36 +204,69 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
           const SizedBox(height: 16),
           _buildInput("Nome de Usuário (@)", _userController),
           const SizedBox(height: 16),
-          _buildInput("CPF", _cpfController, keyboardType: TextInputType.number, inputFormatters: [cpfMask]),
+          _buildInput(
+            "CPF",
+            _cpfController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [cpfMask],
+          ),
           const SizedBox(height: 16),
-          _buildInput("Data de Nascimento", _dataNascimentoController, keyboardType: TextInputType.number, inputFormatters: [dataMask]),
+          _buildInput(
+            "Data de Nascimento",
+            _dataNascimentoController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [dataMask],
+          ),
         ];
       case 1:
         return [
-          _buildInput("Telefone", _telefoneController, keyboardType: TextInputType.phone, inputFormatters: [foneMask]),
+          _buildInput(
+            "Telefone",
+            _telefoneController,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [foneMask],
+          ),
           const SizedBox(height: 16),
-          _buildInput("E-mail", _emailController, keyboardType: TextInputType.emailAddress),
+          _buildInput(
+            "E-mail",
+            _emailController,
+            keyboardType: TextInputType.emailAddress,
+          ),
         ];
       case 2:
         return [
           Row(
             children: [
               Expanded(
-                child: _buildInput("CEP", _cepController, keyboardType: TextInputType.number, inputFormatters: [cepMask]),
+                child: _buildInput(
+                  "CEP",
+                  _cepController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [cepMask],
+                ),
               ),
               const SizedBox(width: 12),
               SizedBox(
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: _buscandoCep ? null : _buscarCEP,
+                  onPressed: _viewModel.isSearchingCep ? null : _buscarCEP,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF244A3A),
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
-                  child: _buscandoCep 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Buscar'),
+                  child: _viewModel.isSearchingCep
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Buscar'),
                 ),
               ),
             ],
@@ -271,30 +284,40 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
             ],
           ),
           const SizedBox(height: 16),
-          _buildInput("Número da Casa", _numeroController, keyboardType: TextInputType.number),
+          _buildInput(
+            "Número da Casa",
+            _numeroController,
+            keyboardType: TextInputType.number,
+          ),
         ];
       case 3:
         return [
           _buildInput(
-            "Senha de Acesso (Até 8 dígitos)", 
-            _senhaAcessoController, 
+            "Senha de Acesso (Até 8 dígitos)",
+            _senhaAcessoController,
             obscureText: _ocultarSenhaAcesso,
             maxLength: 8,
             suffixIcon: IconButton(
-              icon: Icon(_ocultarSenhaAcesso ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF757575)),
+              icon: Icon(
+                _ocultarSenhaAcesso ? Icons.visibility : Icons.visibility_off,
+                color: const Color(0xFF757575),
+              ),
               onPressed: () => setState(() => _ocultarSenhaAcesso = !_ocultarSenhaAcesso),
             ),
           ),
           const SizedBox(height: 16),
           _buildInput(
-            "Senha de Transação (6 números)", 
-            _senhaTransacaoController, 
-            obscureText: _ocultarSenhaTransacao, 
-            keyboardType: TextInputType.number, 
+            "Senha de Transação (6 números)",
+            _senhaTransacaoController,
+            obscureText: _ocultarSenhaTransacao,
+            keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             maxLength: 6,
             suffixIcon: IconButton(
-              icon: Icon(_ocultarSenhaTransacao ? Icons.visibility : Icons.visibility_off, color: const Color(0xFF757575)),
+              icon: Icon(
+                _ocultarSenhaTransacao ? Icons.visibility : Icons.visibility_off,
+                color: const Color(0xFF757575),
+              ),
               onPressed: () => setState(() => _ocultarSenhaTransacao = !_ocultarSenhaTransacao),
             ),
           ),
@@ -306,11 +329,16 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
 
   String _obterTituloEtapa() {
     switch (_etapaAtual) {
-      case 0: return "Dados Pessoais";
-      case 1: return "Canais de Contato";
-      case 2: return "Seu Endereço";
-      case 3: return "Segurança";
-      default: return "Criar Conta";
+      case 0:
+        return "Dados Pessoais";
+      case 1:
+        return "Canais de Contato";
+      case 2:
+        return "Seu Endereço";
+      case 3:
+        return "Segurança";
+      default:
+        return "Criar Conta";
     }
   }
 
@@ -326,106 +354,126 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
       const Color(0xFF10251B),
     ];
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: _voltarEtapa,
-        ),
-      ),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: RotationTransition(
-              turns: _controller1,
-              child: Transform.scale(
-                scale: 2.5,
-                child: Opacity(
-                  opacity: 0.8,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: SweepGradient(colors: bankPalette),
-                    ),
-                  ),
-                ),
-              ),
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) {
+        return Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: _voltarEtapa,
             ),
           ),
-          Positioned.fill(
-            child: AnimatedBuilder(
-              animation: _controller2,
-              builder: (context, child) {
-                return Transform.rotate(
-                  angle: -_controller2.value * 2 * math.pi,
-                  child: child,
-                );
-              },
-              child: Transform.scale(
-                scale: 2.0,
-                child: Opacity(
-                  opacity: 0.6,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: SweepGradient(
-                        colors: bankPalette.reversed.toList(),
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: RotationTransition(
+                  turns: _controller1,
+                  child: Transform.scale(
+                    scale: 2.5,
+                    child: Opacity(
+                      opacity: 0.8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: SweepGradient(colors: bankPalette),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-              child: Container(color: Colors.transparent),
-            ),
-          ),
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: _buildFormCard(
-                  context,
-                  title: _obterTituloEtapa(),
-                  children: [
-                    ..._renderizarEtapaAtual(),
-                    const SizedBox(height: 30),
-                    BouncingButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD4F85A),
-                        minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      onPressed: _etapaAtual == 3 ? _finalizarCadastro : _avancarEtapa,
-                      child: Text(
-                        _etapaAtual == 3 ? "Finalizar Cadastro" : "Continuar",
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _controller2,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: -_controller2.value * 2 * math.pi,
+                      child: child,
+                    );
+                  },
+                  child: Transform.scale(
+                    scale: 2.0,
+                    child: Opacity(
+                      opacity: 0.6,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: SweepGradient(
+                            colors: bankPalette.reversed.toList(),
+                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: _buildFormCard(
+                      context,
+                      title: _obterTituloEtapa(),
+                      children: [
+                        ..._renderizarEtapaAtual(),
+                        const SizedBox(height: 30),
+                        BouncingButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4F85A),
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: _viewModel.isLoading
+                              ? null
+                              : (_etapaAtual == 3 ? _finalizarCadastro : _avancarEtapa),
+                          child: _viewModel.isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.black,
+                                  ),
+                                )
+                              : Text(
+                                  _etapaAtual == 3 ? "Finalizar Cadastro" : "Continuar",
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildFormCard(BuildContext context, {required String title, required List<Widget> children}) {
+  Widget _buildFormCard(
+    BuildContext context, {
+    required String title,
+    required List<Widget> children,
+  }) {
     return Container(
       width: MediaQuery.of(context).size.width * 0.85,
       padding: const EdgeInsets.all(24),
@@ -465,7 +513,15 @@ class _CadastroPageState extends State<CadastroPage> with TickerProviderStateMix
     );
   }
 
-  Widget _buildInput(String label, TextEditingController controller, {bool obscureText = false, TextInputType? keyboardType, List<TextInputFormatter>? inputFormatters, Widget? suffixIcon, int? maxLength}) {
+  Widget _buildInput(
+    String label,
+    TextEditingController controller, {
+    bool obscureText = false,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    Widget? suffixIcon,
+    int? maxLength,
+  }) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
