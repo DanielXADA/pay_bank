@@ -188,7 +188,7 @@ ID da transação: $idTransacao
 Idempotency Key: ${_viewModel.idempotencyKey ?? 'N/A'}
 ''';
 
-    Share.share(textoComprovante);
+    SharePlus.instance.share(ShareParams(text: textoComprovante));
   }
 
   Future<void> _validarERevisar() async {
@@ -369,6 +369,7 @@ Idempotency Key: ${_viewModel.idempotencyKey ?? 'N/A'}
                   return;
                 }
 
+                if (!dialogCtx.mounted) return;
                 Navigator.pop(dialogCtx);
                 final sucesso = await _viewModel.executeTransfer();
 

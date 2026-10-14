@@ -263,7 +263,7 @@ Data: ${transferencia['data']}
 ID: ${transferencia['id_transacao'] ?? 'Não informado'}
 ''';
 
-    Share.share(texto);
+    SharePlus.instance.share(ShareParams(text: texto));
   }
 
   void _mostrarComprovanteAntigo(Map<String, dynamic> transferencia) {

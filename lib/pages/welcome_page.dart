@@ -153,7 +153,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                                   alignment: FractionalOffset.center,
                                   transform: Matrix4.identity()
                                     ..setEntry(3, 2, 0.0015)
-                                    ..translate(-20.0, 50.0 + dy1, 0.0)
+                                    ..translateByDouble(-20.0, 50.0 + dy1, 0.0, 1.0)
                                     ..rotateX(-0.7)
                                     ..rotateZ(-0.4),
                                   child: _buildCard(const Color(0xFF3FA168), false),
@@ -162,7 +162,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                                   alignment: FractionalOffset.center,
                                   transform: Matrix4.identity()
                                     ..setEntry(3, 2, 0.0015)
-                                    ..translate(20.0, -10.0 + dy2, 0.0)
+                                    ..translateByDouble(20.0, -10.0 + dy2, 0.0, 1.0)
                                     ..rotateX(-0.7)
                                     ..rotateZ(-0.4),
                                   child: _buildCard(const Color(0xFFD4F85A), true),

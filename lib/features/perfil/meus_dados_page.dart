@@ -175,17 +175,22 @@ class _MeusDadosPageState extends State<MeusDadosPage> {
                 ),
                 TextButton(
                   onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
                     final senha = controladorSenha.text.trim();
                     final valida = await _viewModel.verifyCurrentPassword(senha);
 
                     if (valida) {
-                      Navigator.pop(dialogCtx);
-                      setState(() {
-                        _editando = true;
-                      });
+                      if (dialogCtx.mounted) {
+                        Navigator.pop(dialogCtx);
+                      }
+                      if (mounted) {
+                        setState(() {
+                          _editando = true;
+                        });
+                      }
                     } else {
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        messenger.showSnackBar(
                           const SnackBar(content: Text('Senha incorreta! Acesso negado.')),
                         );
                       }

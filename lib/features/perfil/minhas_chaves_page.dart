@@ -181,16 +181,18 @@ class _MinhasChavesPageState extends State<MinhasChavesPage> {
                 final pin = pinController.text.trim();
                 final valido = await _viewModel.verifyTransactionPin(pin);
 
+                if (!mounted) return;
+
                 if (!valido) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('PIN incorreto. Ação cancelada.')),
-                    );
-                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('PIN incorreto. Ação cancelada.')),
+                  );
                   return;
                 }
 
-                Navigator.pop(dialogCtx);
+                if (dialogCtx.mounted) {
+                  Navigator.pop(dialogCtx);
+                }
                 onAuthorized();
               },
               child: const Text('Confirmar', style: TextStyle(color: Colors.white)),
